@@ -9,13 +9,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class OpenRouterAdapter extends BaseLLMAdapter {
 
+    private static final String MODEL = "openrouter/owl-alpha";
+
     @Value("${llm.openrouter.base-url}")
     private String BASE_URL;
 
     @Value("${llm.openrouter.api-key}")
     private String API_KEY;
-
-    private static final String MODEL = "openrouter/owl-alpha";
 
     @Override
     protected String getBaseUrl() {

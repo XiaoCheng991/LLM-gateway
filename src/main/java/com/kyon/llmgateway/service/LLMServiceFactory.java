@@ -22,6 +22,9 @@ public class LLMServiceFactory {
      */
     public LLMService getLlmService(String modelName) {
         // 根据前缀来路由
+        if (modelName == null || modelName.isBlank()) {
+            throw new RuntimeException("Model name cannot be null");
+        }
         // "openrouter/owl-alpha" | "nvidia/deepseek-ai/deepseek-v4-flash"
         String prefix = modelName.split("/")[0].toLowerCase();
 

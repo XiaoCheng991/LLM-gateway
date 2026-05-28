@@ -1,10 +1,11 @@
 package com.kyon.llmgateway.controller;
 
+import com.kyon.llmgateway.model.ApiResult;
 import com.kyon.llmgateway.model.ChatRequest;
 import com.kyon.llmgateway.model.ChatResponse;
 import com.kyon.llmgateway.service.LLMService;
 import com.kyon.llmgateway.service.LLMServiceFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,16 +18,19 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/chat")
 public class ChatController {
 
-    @Autowired
+    @Resource
     private LLMServiceFactory factory;
 
     @PostMapping("completions")
-    public ChatResponse chat(@RequestBody ChatRequest request) throws Exception {
-        LLMService service = factory.getLlmService(request.getModel());
+    public ApiResult<ChatResponse> chat(@RequestBody ChatRequest request) {
+        try {
+            LLMService service = factory.getLlmService(request.getModel());
 
-        // 从 request.getMessages() 中取出第一天 user 消息
-        String userMsg = request.getMessages().getFirst().getContent();
-        return service.chat(userMsg);
+            // 从 request.getMessages() 中取出 user 消息
+            return ApiResult.success(service.chat(request.getMessages()));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
 }

@@ -12,7 +12,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 
 public abstract class BaseLLMAdapter implements LLMService {
@@ -29,13 +28,9 @@ public abstract class BaseLLMAdapter implements LLMService {
     protected abstract String getModelName();
 
     @Override
-    public ChatResponse chat(String userMessage) throws Exception {
+    public ChatResponse chat(List<Message> userMsgList) throws Exception {
         // 1. 拼 JSON 请求体
-        List<Message> list = new ArrayList<>();
-        Message msg = new Message("user", userMessage);
-        list.add(msg);
-
-        ChatRequest req = new ChatRequest(getModelName(), list);
+        ChatRequest req = new ChatRequest(getModelName(), userMsgList);
         String json = om.writeValueAsString(req);
 
         // 2. 构建 POST 请求
