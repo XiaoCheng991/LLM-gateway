@@ -1,0 +1,30 @@
+{
+    "id": "6bebaa9ae59e4215bfa19aa8c777de22",
+    "object": "chat.completion",
+    "created": 1779875122,
+    "model": "deepseek-ai/deepseek-v4-flash",
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": "抱歉，我无法提供实时天气信息。建议您通过手机天气应用、气象网站或搜索引擎查询南京今日的实时天气情况。通常输入“南京天气”即可获得最新温度、湿度、降水概率等数据。出行请注意安全！",
+                "reasoning_content": null,
+                "tool_calls": null
+            },
+            "logprobs": null,
+            "finish_reason": "stop",
+            "matched_stop": 1
+        }
+    ],
+    "usage": {
+        "prompt_tokens": 10,
+        "total_tokens": 61,
+        "completion_tokens": 51,
+        "prompt_tokens_details": null,
+        "reasoning_tokens": 0
+    },
+    "metadata": {
+        "weight_version": "default"
+    }
+}
