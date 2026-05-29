@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: llm-gateway
+
+# 模型相关配置
+llm:
+  nvidia:
+    api-key: ${NVIDIA_API_KEY}
+    base-url: https://integrate.api.nvidia.com/v1/chat/completions
+  openrouter:
+    api-key: ${OPENROUTER_API_KEY}
+    base-url: https://openrouter.ai/api/v1/chat/completions
+  models:
+    - model: openrouter/owl-alpha
+      provider: openrouter
+      status: active
+    - model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      provider: openrouter
+      status: active
+    - model: nvidia/deepseek-ai/deepseek-v4-flash
+      provider: nvidia
+      status: active
+    - model: nvidia/deepseek-ai/deepseek-v4-pro
+      provider: nvidia
+      status: active
+    - model: nvidia/moonshot-ai/kimi-k2.6
+      provider: moonshot
+      status: active

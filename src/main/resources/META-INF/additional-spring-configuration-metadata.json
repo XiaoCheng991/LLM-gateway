@@ -1,0 +1,10 @@
+{
+  "properties": [
+    {
+      "name": "llm.models",
+      "type": "java.util.List<com.kyon.llmgateway.model.ModelInfo>",
+      "description": "List of supported LLM models with their configurations.",
+      "defaultValue": []
+    }
+  ]
+}

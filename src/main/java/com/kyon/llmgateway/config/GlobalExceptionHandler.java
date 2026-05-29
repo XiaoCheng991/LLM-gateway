@@ -1,7 +1,7 @@
 package com.kyon.llmgateway.config;
 
 import com.kyon.llmgateway.model.ApiResult;
-import com.kyon.llmgateway.model.ResultCode;
+import com.kyon.llmgateway.model.enums.ResultCode;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 

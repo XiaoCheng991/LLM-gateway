@@ -1,5 +1,6 @@
 package com.kyon.llmgateway.model;
 
+import com.kyon.llmgateway.model.enums.ResultCode;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

@@ -1,4 +1,4 @@
-package com.kyon.llmgateway.model;
+package com.kyon.llmgateway.model.enums;
 
 import lombok.Getter;
 

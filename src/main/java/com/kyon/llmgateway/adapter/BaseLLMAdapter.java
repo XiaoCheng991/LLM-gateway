@@ -37,10 +37,11 @@ public abstract class BaseLLMAdapter implements LLMService {
 
     @Override
     public ChatResponse chat(List<Message> userMsgList) throws Exception {
-        log.debug("Chat request - model: {}, messages: {}", getModelName(), userMsgList.size());
+        String modelName = getModelName();
+        log.debug("Chat request - model: {}, messages: {}", modelName, userMsgList.size());
 
         // 1. 拼 JSON 请求体
-        ChatRequest req = new ChatRequest(getModelName(), userMsgList, false);
+        ChatRequest req = new ChatRequest(modelName, userMsgList, false);
         String json = om.writeValueAsString(req);
 
         // 2. 构建 POST 请求
@@ -80,7 +81,8 @@ public abstract class BaseLLMAdapter implements LLMService {
     // SSE 流式接口 - 默认实现，子类可覆盖
     @Override
     public SseEmitter stream(List<Message> userMsgList) {
-        log.debug("Stream request - model: {}, messages: {}", getModelName(), userMsgList.size());
+        String modelName = getModelName();
+        log.debug("Stream request - model: {}, messages: {}", modelName, userMsgList.size());
 
         // 1. 创建 SseEmitter，设置 5 分钟超时
         SseEmitter emitter = new SseEmitter( 5 * 60 * 1000L);
@@ -89,7 +91,7 @@ public abstract class BaseLLMAdapter implements LLMService {
         new Thread(() -> {
             try {
                 // 2.1. 发起 HTTP POST 请求，请求体里加 "stream": true
-                ChatRequest req = new ChatRequest(getModelName(), userMsgList, true);
+                ChatRequest req = new ChatRequest(modelName, userMsgList, true);
                 String json = om.writeValueAsString(req);
 
                 // 2.2 设置请求头 Accept：text/event-stream
@@ -145,9 +147,9 @@ public abstract class BaseLLMAdapter implements LLMService {
                 }
                 // emitter 流正常结束
                 emitter.complete();
-                log.info("Stream completed - model: {}", getModelName());
+                log.info("Stream completed - model: {}", modelName);
             } catch (Exception e) {
-                log.error("Stream request failed - model: {}", getModelName(), e);
+                log.error("Stream request failed - model: {}", modelName, e);
                emitter.completeWithError(e);
             }
         }).start();
