@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * POST /api/chat - 统一入口
@@ -21,7 +22,12 @@ public class ChatController {
     @Resource
     private LLMServiceFactory factory;
 
-    @PostMapping("completions")
+    /**
+     * 普通交互，仅一次
+     * @param request 请求体
+     * @return ChatResponse
+     */
+    @PostMapping("/completions")
     public ApiResult<ChatResponse> chat(@RequestBody ChatRequest request) {
         try {
             LLMService service = factory.getLlmService(request.getModel());
@@ -33,4 +39,14 @@ public class ChatController {
         }
     }
 
+    /**
+     * 流式回复 SSE
+     * @param request 请求体
+     * @return SseEmitter 流式Emitter
+     */
+    @PostMapping("/completions/stream")
+    public SseEmitter chatStream(@RequestBody ChatRequest request) {
+        LLMService service = factory.getLlmService(request.getModel());
+        return service.stream(request.getMessages());
+    }
 }

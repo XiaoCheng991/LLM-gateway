@@ -8,13 +8,13 @@ import org.springframework.context.annotation.Bean;
 @SpringBootApplication
 public class LLMGatewayApplication {
 
-    static void main(String[] args) {
+    public static void main(String[] args) {
         SpringApplication.run(LLMGatewayApplication.class, args);
     }
 
     @Bean
     public CommandLineRunner printStartupMessage() {
-        return _ -> {
+        return s -> {
             System.out.println("""
                     ██   ██ ██    ██  ██████  ███    ██
                     ██  ██   ██  ██  ██    ██ ████   ██
