@@ -4,6 +4,9 @@ spring:
 
 # 模型相关配置
 llm:
+  agnes:
+    api-key: ${AGNES_API_KEY}
+    base-url: https://apihub.agnes-ai.com/v1/chat/completions
   nvidia:
     api-key: ${NVIDIA_API_KEY}
     base-url: https://integrate.api.nvidia.com/v1/chat/completions
@@ -25,4 +28,13 @@ llm:
       status: active
     - model: nvidia/moonshot-ai/kimi-k2.6
       provider: nvidia
+      status: active
+    - model: agnes/agnes-2.0-flash
+      provider: agnes
+      status: active
+    - model: agnes/agnes-image-2.1-flash
+      provider: agnes
+      status: active
+    - model: agnes/agnes-video-v2.0
+      provider: agnes
       status: active
