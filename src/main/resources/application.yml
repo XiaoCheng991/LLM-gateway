@@ -24,5 +24,5 @@ llm:
       provider: nvidia
       status: active
     - model: nvidia/moonshot-ai/kimi-k2.6
-      provider: moonshot
+      provider: nvidia
       status: active

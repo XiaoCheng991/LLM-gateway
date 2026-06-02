@@ -18,6 +18,10 @@ public class ApiResult<T> {
         return new ApiResult<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMsg(), data);
     }
 
+    public static <T> ApiResult<T> success(String msg, T data) {
+        return new ApiResult<>(ResultCode.SUCCESS.getCode(), msg, data);
+    }
+
     public static <T> ApiResult<T> error(ResultCode resultCode) {
        return new ApiResult<>(resultCode.getCode(), resultCode.getMsg(), null);
     }

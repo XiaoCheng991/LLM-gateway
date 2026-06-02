@@ -1,10 +1,10 @@
 package com.kyon.llmgateway.service;
 
+import com.kyon.llmgateway.adapter.MoonshotAdapter;
 import com.kyon.llmgateway.adapter.NvidiaAdapter;
 import com.kyon.llmgateway.adapter.OpenRouterAdapter;
 import com.kyon.llmgateway.config.ModelConfig;
 import jakarta.annotation.Resource;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -18,7 +18,11 @@ public class LLMServiceFactory {
 
     @Resource
     private NvidiaAdapter nvidiaAdapter;
-    @Autowired
+
+    @Resource
+    private MoonshotAdapter moonshotAdapter;
+
+    @Resource
     private ModelConfig modelConfig;
 
     /**
@@ -36,6 +40,7 @@ public class LLMServiceFactory {
         return switch (provider) {
             case "openrouter" -> openRouterAdapter;
             case "nvidia" -> nvidiaAdapter;
+            case "moonshot" -> moonshotAdapter;
             default -> throw new IllegalArgumentException("不支持的 Provider: %s".formatted(provider));
         };
     }
