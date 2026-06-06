@@ -8,8 +8,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class AgnesAdapter extends BaseLLMAdapter {
-    // 模型
-    private static final String MODEL = "agnes-2.0-flash";
 
     @Value("${llm.agnes.base-url}")
     private String BASE_URL;
@@ -28,7 +26,7 @@ public class AgnesAdapter extends BaseLLMAdapter {
     }
 
     @Override
-    protected String getModelName() {
-        return MODEL;
+    public String getProviderName() {
+        return "agnes";
     }
 }

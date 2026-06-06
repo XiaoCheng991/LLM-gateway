@@ -27,7 +27,7 @@ public class TraceFilter extends OncePerRequestFilter {
         MDC.put("traceId", traceId.toString());
 
         try {
-            logger.info("TraceFilter: {} {} ]", request.getMethod(), request.getRequestURI());
+            logger.info("[TraceFilter: {} {} ]", request.getMethod(), request.getRequestURI());
             filterChain.doFilter(request, response);
         } finally {
             // 确保清理 MDC，防止内存泄漏

@@ -8,8 +8,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class NvidiaAdapter extends BaseLLMAdapter {
-    // 模型
-    private static final String MODEL = "deepseek-ai/deepseek-v4-flash";
 
     @Value("${llm.nvidia.base-url}")
     private String BASE_URL;
@@ -28,7 +26,7 @@ public class NvidiaAdapter extends BaseLLMAdapter {
     }
 
     @Override
-    protected String getModelName() {
-        return MODEL;
+    public String getProviderName() {
+        return "nvidia";
     }
 }

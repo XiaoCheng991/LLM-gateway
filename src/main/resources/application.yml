@@ -4,6 +4,7 @@ spring:
 
 # 模型相关配置
 llm:
+  sse-timeout: 300000  # 5分钟，毫秒
   agnes:
     api-key: ${AGNES_API_KEY}
     base-url: https://apihub.agnes-ai.com/v1/chat/completions

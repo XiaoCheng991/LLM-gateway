@@ -33,4 +33,19 @@ build/
 .vscode/
 
 ### 配置密钥 ###
-*.env
+.env
+.env.*
+
+### gsd 文档 ###
+.planning/*
+
+### OS ###
+.DS_Store
+
+### Logs ###
+logs/
+
+### agents ###
+.agents*
+.codegraph*
+.claude*

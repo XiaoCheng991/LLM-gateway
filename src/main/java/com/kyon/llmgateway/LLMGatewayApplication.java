@@ -1,5 +1,6 @@
 package com.kyon.llmgateway;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -14,6 +15,9 @@ public class LLMGatewayApplication {
         SpringApplication.run(LLMGatewayApplication.class, args);
     }
 
+    @Value("${server.port:8080}")
+    private String serverPort;
+
     @Bean
     public CommandLineRunner printStartupMessage() {
         return s -> {
@@ -26,7 +30,7 @@ public class LLMGatewayApplication {
                     """);
             System.out.println("========================================");
             System.out.println("  🚀 LLM Gateway 已成功启动");
-            System.out.println("  🌐 访问地址: http://localhost:8080");
+            System.out.println("  🌐 访问地址: http://localhost:" + serverPort);
             System.out.println("========================================");
         };
     }

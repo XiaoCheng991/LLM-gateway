@@ -58,7 +58,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jackson</artifactId>
-            <version>4.1.0-M3</version>
             <scope>compile</scope>
         </dependency>
         <dependency>

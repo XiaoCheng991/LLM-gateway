@@ -4,8 +4,11 @@ import com.kyon.llmgateway.model.ChatRequest;
 import com.kyon.llmgateway.model.ChatResponse;
 import com.kyon.llmgateway.model.Message;
 import com.kyon.llmgateway.service.LLMService;
+import jakarta.annotation.PreDestroy;
+import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -20,8 +23,12 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public abstract class BaseLLMAdapter implements LLMService {
+
     private static final Logger log = LoggerFactory.getLogger(BaseLLMAdapter.class);
 
     // ObjectMapper
@@ -33,11 +40,25 @@ public abstract class BaseLLMAdapter implements LLMService {
     // 子类仅需要提供三个配置
     protected abstract String getBaseUrl();
     protected abstract String getApiKey();
-    protected abstract String getModelName();
+    public abstract String getProviderName();
+
+    // 供 Factory 调用，设置 model
+    // 新增：存路由时传进来的 model
+    @Setter
+    private String currentModel;
+
+    // 线程池 复用(虚拟线程)
+    // newCachedThreadPool 适合SSE这种长连接、数量不固定
+    protected final ExecutorService executor = Executors.newCachedThreadPool(
+            Thread.ofVirtual().name("sse-stream-", 0).factory()
+    );
+
+    @Value("${llm.sse-timeout:300000}") // 默认5分钟
+    private long sseTimeout;
 
     @Override
     public ChatResponse chat(List<Message> userMsgList) throws Exception {
-        String modelName = getModelName();
+        String modelName = currentModel;
         log.debug("Chat request - model: {}, messages: {}", modelName, userMsgList.size());
 
         // 1. 拼 JSON 请求体
@@ -60,10 +81,17 @@ public abstract class BaseLLMAdapter implements LLMService {
         // 4. 解析响应, 解析为ChatResponse
         JsonNode root = om.readTree(response.body());
 
-        String content = root.get("choices").get(0).get("message").get("content").asString();
-        Integer inputTokens = root.get("usage").get("prompt_tokens").asInt();
-        Integer outputTokens = root.get("usage").get("completion_tokens").asInt();
-        String model = root.get("model").asString();
+        // 校验错误
+        if (root.has("error")) {
+            throw new RuntimeException("API Error: " + root.path("error")
+                    .path("message").asString("unknow error"));
+        }
+
+        String content = root.path("choices").path(0)
+                .path("message").path("content").asString("");
+        Integer inputTokens = root.path("usage").path("prompt_tokens").asInt(0);
+        Integer outputTokens = root.path("usage").path("completion_tokens").asInt(0);
+        String model = root.path("model").asString(currentModel);
 
         log.info("Chat completed - model: {}, inputTokens: {}, outputTokens: {}, latency: {}ms",
                 model, inputTokens, outputTokens, latency);
@@ -77,18 +105,36 @@ public abstract class BaseLLMAdapter implements LLMService {
                 .build();
     }
 
+    @PreDestroy
+    public void shutdown() throws InterruptedException {
+        log.info("Shutting down ExecutorService for {}", getProviderName());
+        if (!executor.isShutdown()) {
+            executor.shutdownNow();
+            try {
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                    log.warn("Executor did not terminate in 10s, forcing shutdown");
+                    executor.shutdown();
+                }
+            } catch (InterruptedException e) {
+                log.error("Interrupted while waiting for ExecutorService to terminate", e);
+                executor.shutdown();
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
 
     // SSE 流式接口 - 默认实现，子类可覆盖
     @Override
     public SseEmitter stream(List<Message> userMsgList) {
-        String modelName = getModelName();
+        String modelName = currentModel;
         log.debug("Stream request - model: {}, messages: {}", modelName, userMsgList.size());
 
         // 1. 创建 SseEmitter，设置 5 分钟超时
-        SseEmitter emitter = new SseEmitter( 5 * 60 * 1000L);
+        SseEmitter emitter = new SseEmitter(sseTimeout);
 
         // 2. 启动新线程执行流式请求
-        new Thread(() -> {
+        executor.submit(() -> {
             try {
                 // 2.1. 发起 HTTP POST 请求，请求体里加 "stream": true
                 ChatRequest req = new ChatRequest(modelName, userMsgList, true);
@@ -152,7 +198,7 @@ public abstract class BaseLLMAdapter implements LLMService {
                 log.error("Stream request failed - model: {}", modelName, e);
                emitter.completeWithError(e);
             }
-        }).start();
+        });
 
         // 3. 直接返回 emitter，不需要等线程执行完
         return emitter;
