@@ -33,7 +33,7 @@ public class ToolEngine {
         List<ToolResult> results = new ArrayList<>();
 
         for (JsonNode tc : toolCalls) {
-            if (tc == null || tc.get("id").isEmpty() || tc.get("function").isNull()) {
+            if (tc == null) {
                 continue;
             }
 

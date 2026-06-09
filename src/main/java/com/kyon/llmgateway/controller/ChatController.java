@@ -1,5 +1,6 @@
 package com.kyon.llmgateway.controller;
 
+import com.kyon.llmgateway.agent.engine.ContextManager;
 import com.kyon.llmgateway.agent.engine.ToolEngine;
 import com.kyon.llmgateway.agent.engine.ToolResult;
 import com.kyon.llmgateway.agent.tool.ToolRegistry;
@@ -33,6 +34,8 @@ public class ChatController {
     private ToolRegistry toolRegistry;
     @Resource
     private ToolEngine toolEngine;
+    @Resource
+    private ContextManager contextManager;
 
     /**
      * 普通交互(Loop)
@@ -62,6 +65,9 @@ public class ChatController {
             int callCount = 0;
 
             while (callCount < maxToolCalls) {
+                // 0. 裁剪上下文，防止超限
+                messages = contextManager.truncate(messages);
+                messages = contextManager.truncateByTokens(messages);
                 // 1. 调用 LLM
                 ChatResponse response = service.chat(messages, tools);
 
