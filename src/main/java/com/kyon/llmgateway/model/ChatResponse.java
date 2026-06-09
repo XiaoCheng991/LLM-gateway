@@ -2,6 +2,7 @@ package com.kyon.llmgateway.model;
 
 import lombok.Builder;
 import lombok.Data;
+import tools.jackson.databind.JsonNode;
 
 /**
  * {model, content, latencyMs, tokens, cost}
@@ -23,4 +24,15 @@ public class ChatResponse {
 
     // 请求耗时（毫秒）
     private Long latency;
+
+    // "stop" 标识正常结束， "tool_call" 标识需要调用工
+    private String finishReason;
+
+    // LLM 返回的 tool_calls 数组，null 表示不需要调工具
+    private JsonNode toolCalls;
+
+    /** 判断是否有工具调用 */
+    public boolean hasToolCalls() {
+        return toolCalls != null && toolCalls.isArray() && !toolCalls.isEmpty();
+    }
 }

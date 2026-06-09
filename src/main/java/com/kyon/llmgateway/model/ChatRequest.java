@@ -7,7 +7,7 @@ import lombok.Data;
 import java.util.List;
 
 /**
- *  {modelId, prompt, systemPrompt, temperature}
+ *  模型请求
  */
 @Builder
 @Data
@@ -23,4 +23,10 @@ public class ChatRequest {
     // 流式响应开关
     @Builder.Default
     private Boolean stream = false;
+
+    // 工具定义列表 - 告诉 LLM 有哪些工具可用
+    private List<ToolDefinition> tools;
+
+    // 工具调用控制 - "auto" 自动选择 ｜ "none" 不调 ｜ "required" 强制调
+    private String toolChoice;
 }

@@ -2,6 +2,7 @@ package com.kyon.llmgateway.service;
 
 import com.kyon.llmgateway.model.ChatResponse;
 import com.kyon.llmgateway.model.Message;
+import com.kyon.llmgateway.model.ToolDefinition;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
@@ -11,7 +12,7 @@ import java.util.List;
  */
 public interface LLMService {
     // Chat 方法 - 同步接口
-    ChatResponse chat(List<Message> userMsgList) throws Exception;
+    ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools) throws Exception;
 
     // SSE 流失方法
     SseEmitter stream(List<Message> userMsgList);

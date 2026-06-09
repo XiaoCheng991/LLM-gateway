@@ -3,8 +3,10 @@ package com.kyon.llmgateway.adapter;
 import com.kyon.llmgateway.model.ChatRequest;
 import com.kyon.llmgateway.model.ChatResponse;
 import com.kyon.llmgateway.model.Message;
+import com.kyon.llmgateway.model.ToolDefinition;
 import com.kyon.llmgateway.service.LLMService;
 import jakarta.annotation.PreDestroy;
+import lombok.Getter;
 import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,8 +46,13 @@ public abstract class BaseLLMAdapter implements LLMService {
 
     // 供 Factory 调用，设置 model
     // 新增：存路由时传进来的 model
+    @Getter
     @Setter
     private String currentModel;
+
+    protected String getEffectiveModel() {
+        return currentModel;  // 默认原样返回
+    }
 
     // 线程池 复用(虚拟线程)
     // newCachedThreadPool 适合SSE这种长连接、数量不固定
@@ -57,12 +64,12 @@ public abstract class BaseLLMAdapter implements LLMService {
     private long sseTimeout;
 
     @Override
-    public ChatResponse chat(List<Message> userMsgList) throws Exception {
-        String modelName = currentModel;
+    public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools) throws Exception {
+        String modelName = getEffectiveModel();
         log.debug("Chat request - model: {}, messages: {}", modelName, userMsgList.size());
 
         // 1. 拼 JSON 请求体
-        ChatRequest req = new ChatRequest(modelName, userMsgList, false);
+        ChatRequest req = new ChatRequest(modelName, userMsgList, false, tools, "required");
         String json = om.writeValueAsString(req);
 
         // 2. 构建 POST 请求
@@ -92,6 +99,15 @@ public abstract class BaseLLMAdapter implements LLMService {
         Integer inputTokens = root.path("usage").path("prompt_tokens").asInt(0);
         Integer outputTokens = root.path("usage").path("completion_tokens").asInt(0);
         String model = root.path("model").asString(currentModel);
+        // 获取工具相关
+        String finishReason = root.path("choices").path(0).path("finish_reason").asString("");
+
+        // 解析 tool_calls
+        JsonNode toolCallsNode = null;
+        JsonNode messageNode = root.path("choices").path(0).path("message");
+        if (messageNode.has("tool_calls") && !messageNode.get("tool_calls").isNull()) {
+            toolCallsNode = messageNode.get("tool_calls");
+        }
 
         log.info("Chat completed - model: {}, inputTokens: {}, outputTokens: {}, latency: {}ms",
                 model, inputTokens, outputTokens, latency);
@@ -102,6 +118,8 @@ public abstract class BaseLLMAdapter implements LLMService {
                 .inputTokens(inputTokens)
                 .outputTokens(outputTokens)
                 .latency(latency)     // 单位：毫秒
+                .finishReason(finishReason)
+                .toolCalls(toolCallsNode) // 直接传递 tool_calls 的 JsonNode
                 .build();
     }
 
@@ -123,7 +141,6 @@ public abstract class BaseLLMAdapter implements LLMService {
         }
     }
 
-
     // SSE 流式接口 - 默认实现，子类可覆盖
     @Override
     public SseEmitter stream(List<Message> userMsgList) {
@@ -137,7 +154,7 @@ public abstract class BaseLLMAdapter implements LLMService {
         executor.submit(() -> {
             try {
                 // 2.1. 发起 HTTP POST 请求，请求体里加 "stream": true
-                ChatRequest req = new ChatRequest(modelName, userMsgList, true);
+                ChatRequest req = new ChatRequest(modelName, userMsgList, true, null, null);
                 String json = om.writeValueAsString(req);
 
                 // 2.2 设置请求头 Accept：text/event-stream
