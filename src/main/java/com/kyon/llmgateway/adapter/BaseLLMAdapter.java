@@ -36,7 +36,7 @@ public abstract class BaseLLMAdapter implements LLMService {
     // ObjectMapper
     protected final ObjectMapper om = new ObjectMapper();
     protected HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
+            .connectTimeout(Duration.ofSeconds(60))
             .build();
 
     // 子类仅需要提供三个配置

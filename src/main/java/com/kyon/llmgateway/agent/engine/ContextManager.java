@@ -6,6 +6,9 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 滑动窗口上下文管理
+ */
 @Component
 public class ContextManager {
 
@@ -25,11 +28,11 @@ public class ContextManager {
 
     /** 按 token 数裁剪, 从最早的非 system 消息开始移除 */
     public List<Message> truncateByTokens(List<Message> messages) {
-        int total = TokenCounter.estimateMessages(messages);
+        int total = com.kyon.llmgateway.agent.engine.TokenCounter.estimateMessages(messages);
         if (total <= MAX_TOKENS) return messages;
 
         List<Message> result = new ArrayList<>(messages);
-        while (TokenCounter.estimateMessages(result) > MAX_TOKENS && result.size() > 1) {
+        while (com.kyon.llmgateway.agent.engine.TokenCounter.estimateMessages(result) > MAX_TOKENS && result.size() > 1) {
             result.remove(1);
         }
         return result;
