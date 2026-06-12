@@ -3,16 +3,13 @@ package com.kyon.llmgateway.controller;
 import com.kyon.llmgateway.agent.AgentRequest;
 import com.kyon.llmgateway.agent.AgentResponse;
 import com.kyon.llmgateway.agent.impl.SimpleAgent;
-import com.kyon.llmgateway.agent.tool.ToolRegistry;
 import com.kyon.llmgateway.model.*;
-import com.kyon.llmgateway.service.LLMService;
 import com.kyon.llmgateway.service.LLMServiceFactory;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,8 +21,6 @@ import java.util.List;
 @RequestMapping("/api/chat")
 public class ChatController {
 
-    @Resource
-    private LLMServiceFactory factory;
     @Resource
     private SimpleAgent simpleAgent;
 
@@ -41,11 +36,14 @@ public class ChatController {
             List<Message> messages = new ArrayList<>(request.getMessages());
 
             // 取最后一条用户消息的 content
-            String lastUserMessage = messages.stream()
-                    .filter(m -> "user".equals(m.getRole()))
-                    .reduce((first, second) -> second)  // 取最后一条
-                    .map(Message::getContent)
-                    .orElse("");
+            String lastUserMessage = "";
+            if (!messages.isEmpty()) {
+                lastUserMessage = messages.stream()
+                        .filter(m -> "user".equals(m.getRole()))
+                        .reduce((first, second) -> second)  // 取最后一条
+                        .map(Message::getContent)
+                        .orElse("");
+            }
 
             // 改为调 Agent的 Tool Loop
             AgentRequest agentRequest = new AgentRequest();
@@ -62,16 +60,5 @@ public class ChatController {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-    }
-
-    /**
-     * 流式回复 SSE
-     * @param request 请求体
-     * @return SseEmitter 流式Emitter
-     */
-    @PostMapping("/completions/stream")
-    public SseEmitter chatStream(@RequestBody ChatRequest request) {
-        LLMService service = factory.getLlmService(request.getModel());
-        return service.stream(request.getMessages());
     }
 }

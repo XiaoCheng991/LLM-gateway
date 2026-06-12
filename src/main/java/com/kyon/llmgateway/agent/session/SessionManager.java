@@ -30,14 +30,8 @@ public class SessionManager {
      * 返回的是 原始的饮用，调用方可以 append() 追加消息
      */
     public List<Message> getOrCreate(String sessionId) {
-        // 先查缓存
-        List<Message> cached = cache.get(sessionId);
-        if (cached != null) return cached;
-
-        // 缓存 miss 未命中 -> 从 SQLite 加载
-        List<Message> loaded = messageStore.load(sessionId);
-        cache.put(sessionId, loaded);
-        return new ArrayList<>(loaded);
+        // 先查缓存，更稳的写法
+        return cache.computeIfAbsent(sessionId, id -> new ArrayList<>(messageStore.load(id)));
     }
 
     /**
