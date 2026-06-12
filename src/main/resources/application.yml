@@ -1,6 +1,8 @@
 spring:
   application:
     name: llm-gateway
+  thymeleaf:
+    cache: false
 
 # 模型相关配置
 llm:
@@ -39,3 +41,8 @@ llm:
     - model: agnes/agnes-video-v2.0
       provider: agnes
       status: active
+
+# SQLite 配置
+agent:
+  db:
+    url: jdbc:sqlite:data/agent.db

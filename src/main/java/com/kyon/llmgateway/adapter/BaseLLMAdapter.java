@@ -1,5 +1,6 @@
 package com.kyon.llmgateway.adapter;
 
+import com.kyon.llmgateway.agent.engine.TokenCounter;
 import com.kyon.llmgateway.model.ChatRequest;
 import com.kyon.llmgateway.model.ChatResponse;
 import com.kyon.llmgateway.model.Message;
@@ -11,6 +12,7 @@ import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -24,25 +26,22 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
+@Component
 public abstract class BaseLLMAdapter implements LLMService {
 
     private static final Logger log = LoggerFactory.getLogger(BaseLLMAdapter.class);
 
-    // ObjectMapper
-    protected final ObjectMapper om = new ObjectMapper();
-    protected HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(60))
-            .build();
-
-    // 子类仅需要提供三个配置
-    protected abstract String getBaseUrl();
-    protected abstract String getApiKey();
-    public abstract String getProviderName();
+    @Value("${llm.sse-timeout:300000}") // 默认5分钟
+    private long sseTimeout;
 
     // 供 Factory 调用，设置 model
     // 新增：存路由时传进来的 model
@@ -54,15 +53,26 @@ public abstract class BaseLLMAdapter implements LLMService {
         return currentModel;  // 默认原样返回
     }
 
+    // 子类仅需要提供三个配置
+    protected abstract String getBaseUrl();
+    protected abstract String getApiKey();
+    public abstract String getProviderName();
+
+    // ObjectMapper
+    protected final ObjectMapper om = new ObjectMapper();
+    protected HttpClient client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(60))
+            .build();
+
     // 线程池 复用(虚拟线程)
     // newCachedThreadPool 适合SSE这种长连接、数量不固定
     protected final ExecutorService executor = Executors.newCachedThreadPool(
             Thread.ofVirtual().name("sse-stream-", 0).factory()
     );
 
-    @Value("${llm.sse-timeout:300000}") // 默认5分钟
-    private long sseTimeout;
-
+    /**
+     * 普通 Loop 调用请求
+     */
     @Override
     public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools) throws Exception {
         String modelName = getEffectiveModel();
@@ -210,7 +220,6 @@ public abstract class BaseLLMAdapter implements LLMService {
                 }
                 // emitter 流正常结束
                 emitter.complete();
-                log.info("Stream completed - model: {}", modelName);
             } catch (Exception e) {
                 log.error("Stream request failed - model: {}", modelName, e);
                emitter.completeWithError(e);
@@ -219,5 +228,134 @@ public abstract class BaseLLMAdapter implements LLMService {
 
         // 3. 直接返回 emitter，不需要等线程执行完
         return emitter;
+    }
+
+    /**
+     * 流式调用 LLM，同时累及完整响应，用于 Tool Loop
+     * @param messages 对话历史
+     * @param tools 工具定义
+     * @param onContentDelta 每个 content delta 的回调，推给前端
+     * @return 完整的 ChatResponse（含 finishReason 和 toolCalls）
+     */
+    public ChatResponse chatStreaming(List<Message> messages, List<ToolDefinition> tools, Consumer<String> onContentDelta) throws Exception {
+        String modelName = getEffectiveModel();
+        log.debug("Streaming chat request -  model: {}, messages: {}", modelName, messages.size());
+
+        // 1. 构建请求
+        ChatRequest req = new ChatRequest(modelName, messages, true, tools, "required");
+        String json = om.writeValueAsString(req);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(getBaseUrl()))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer %s".formatted(getApiKey()))
+                .header("Accept", "text/event-stream")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        // 2. 发请求，拿流式响应
+        long start = System.currentTimeMillis();
+
+        HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+
+        // 3. 逐行读，累计 content
+        BufferedReader br = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8));
+
+        StringBuilder fullContent = new StringBuilder();
+
+        // 累计 tool_calls: key=index, value=拼接中的JSON
+        Map<Integer, StringBuilder> toolCallArgs = new HashMap<>();
+        Map<Integer, String> toolCallIds = new HashMap<>();
+        Map<Integer, String> toolCallNames = new HashMap<>();
+        String finishReason = "";
+
+        String line;
+        while ((line = br.readLine()) != null) {
+            if (!line.startsWith("data: ")) continue;
+
+            String data = line.substring(6);
+            if ("[DONE]".equals(data)) break;
+
+            try {
+                JsonNode root = om.readTree(data);
+
+                // 错误处理
+                if (root.has("error")) {
+                    String errMsg = root.path("error").path("message").asString("unknown error");
+                    throw new RuntimeException("API Error: %s".formatted(errMsg));
+                }
+                // 累计 delta content
+                // delta 就是增量，每次 SSE chunk 只包含当前新增的那一小块
+                JsonNode delta = root.path("choices").path(0).path("delta");
+                if (delta == null) continue;
+                if (delta.has("content")) {
+                    JsonNode contentNode = delta.path("content");
+                    String content = contentNode.asString();
+                    if (!content.isEmpty()) {
+                        fullContent.append(content);
+                        onContentDelta.accept(content); // 推给前端
+                    }
+                }
+
+                // 累计 tool_calls
+                if (delta.has("tool_calls")) {
+                    for (JsonNode tc : delta.get("tool_calls")) {
+                        int index = tc.path("index").asInt();
+                        if (tc.has("id")) {
+                            toolCallIds.put(index, tc.path("id").asString());
+                        }
+                        if (tc.has("function") && tc.path("function").has("name")) {
+                            toolCallNames.put(index, tc.path("function").path("name").asString());
+                        }
+                        if (tc.has("function") && tc.path("function").has("arguments")) {
+                            String args = tc.path("function").path("arguments").toString();
+                            toolCallArgs.computeIfAbsent(index, k -> new StringBuilder()).append(args);
+                        }
+                    }
+                }
+
+                // finish_reason
+                JsonNode frNode = root.path("choices").path(0).path("finish_reason");
+                if (frNode != null && !frNode.isNull()) {
+                    finishReason = frNode.asString();
+                }
+            } catch (Exception parseErr) {
+                log.warn("【SSE】parse error, skipping line: {}", line, parseErr);
+            }
+            log.debug("SSE line parsed, delta={}", data);
+        }
+        long latency = System.currentTimeMillis() - start;
+
+        // 组装 tool_calls JSON
+        JsonNode toolCallsNode = null;
+        if (!toolCallIds.isEmpty()) {
+            List<JsonNode> toolCalls = new ArrayList<>();
+            for (int i = 0; i < toolCallIds.size(); i++) {
+                String id = toolCallIds.get(i);
+                String name = toolCallNames.get(i);
+                String args = toolCallArgs.getOrDefault(i, new StringBuilder()).toString();
+
+                // 组装成 OpenAI tool_calls 格式
+                JsonNode tcJson = om.readTree("""
+                        {"id":"%s","type":"function","function":{"name":"%s","arguments":%s}}
+                        """.formatted(id, name, args.isEmpty() ? "{}" : args));
+                toolCalls.add(tcJson);
+            }
+            toolCallsNode = om.readTree(om.writeValueAsString(toolCalls));
+        }
+
+        // token 估算（流式响应没有 usage，用message和token估算）
+        int inputTokens = TokenCounter.estimateMessages(messages);
+        int outputTokens = TokenCounter.estimateTokens(fullContent.toString());
+
+        return ChatResponse.builder()
+                .content(fullContent.toString())
+                .model(modelName)
+                .inputTokens(inputTokens)
+                .outputTokens(outputTokens)
+                .latency(latency)
+                .finishReason(finishReason)
+                .toolCalls(toolCallsNode)
+                .build();
     }
 }

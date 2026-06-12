@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5;
+            height: 100vh; display: flex; flex-direction: column; }
+
+        /* 头部 */
+        .header { background: #1a1a2e; color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 18px; font-weight: 600; }
+        .header .session-info { font-size: 12px; color: #888; }
+        .header button { background: #e94560; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+        .header button:hover { background: #c73652; }
+
+        /* 对话区 */
+        .chat-area { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+
+        /* 消息气泡 */
+        .message { max-width: 75%; padding: 12px 16px; border-radius: 12px; line-height: 1.6; font-size: 14px; word-break: break-word; }
+        .message.user { align-self: flex-end; background: #1a1a2e; color: white; border-bottom-right-radius: 4px; }
+        .message.assistant { align-self: flex-start; background: white; color: #333; border-bottom-right-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .message.system { align-self: center; background: #fff3cd; color: #856404; font-size: 12px; max-width: 90%; }
+
+        /* 工具调用卡片 */
+        .tool-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 10px 14px; margin-top: 8px; font-size: 13px; }
+        .tool-card .tool-name { color: #495057; font-weight: 600;}
+        .tool-card .tool-result { color: #28a745; margin-top: 4px; }
+        .tool-card.loading { color: #6c757d; font-style: italic; }
+
+        /* 输入区 */
+        .input-area { background: white; border-top: 1px solid #e9ecef; padding: 16px 24px; display: flex; gap: 12px; align-items: flex-end; }
+        .input-area textarea { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 10px 14px; font-size: 14px; resize: none; min-height: 44px; max-height: 120px; font-family: inherit; }
+        .input-area textarea:focus { outline: none; border-color: #1a1a2e; }
+        .input-area select { border: 1px solid #ddd; border-radius: 8px; padding: 10px; font-size: 13px; background: white; }
+        .input-area button { background: #1a1a2e; color: white; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+        .input-area button:hover { background: #16213e; }
+        .input-area button:disabled { background: #ccc; cursor: not-allowed; }
+
+        /* 打字机光标 */
+        .cursor { display: inline-block; width: 2px; height: 16px; background: #333; animation: blink 1s infinite; vertical-align: middle; margin-left: 2px; }
+        @keyframes blink {
+            0%,
+            50% { opacity: 1; }
+            51%,
+            100% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div>
+        <h1>🌈 Agent Chat</h1>
+        <div class="session-info"> 会话：<span id="sessionIdDisplay">新建</span></div>
+    </div>
+    <button onclick="newSession()">新会话</button>
+</div>
+
+<div class="chat-area" id="chatArea">
+    <div class="message system">发送消息开始对话，支持工具调用：计算器、时间查询、网页搜索等。</div>
+</div>
+
+<div class="input-area">
+    <select id="modelSelect">
+        <option value="openrouter/owl-alpha">Owl Alpha</option>
+        <option value="agnes/agnes-2.0-flash">Agnes 2.0 Flash</option>
+        <option value="nvidia/deepseek-ai/deepseek-v4-pro">DeepSeek V4 PRO</option>
+        <option value="nvidia/deepseek-ai/deepseek-v4-flash">DeepSeek V4 FLASH</option>
+    </select>
+    <textarea id="inputBox" placeholder="输入消息..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+    <button id="sendBtn" onclick="sendMessage()">发送</button>
+</div>
+
+<script>
+    // 会话 ID 管理
+    let sessionId = localStorage.getItem('agent_session_id') || '';
+    updateSessionDisplay();
+
+    function updateSessionDisplay() {
+        document.getElementById('sessionIdDisplay').textContent = sessionId || '新建';
+    }
+
+    function newSession() {
+        sessionId = '';
+        localStorage.removeItem('agent_session_id');
+        updateSessionDisplay();
+        document.getElementById('chatArea').innerHTML =
+            '<div class="message system">已开启新会话，发送消息开始对话。</div>';
+    }
+
+    function appendMessage(role, content) {
+        const chatArea = document.getElementById('chatArea');
+        const div = document.createElement('div');
+        div.className = 'message ' + role;
+        div.textContent = content;
+        chatArea.appendChild(div);
+        chatArea.scrollTop = chatArea.scrollHeight;
+        return div;
+    }
+
+    function appendToolCard(name, result) {
+        const chatArea = document.getElementById('chatArea');
+        const card = document.createElement('div');
+        card.className = 'tool-card';
+        card.innerHTML = '<div class="tool-name">🔧 ' + name + '</div>' +
+            (result ? '<div class="tool-result">✅ ' + result + '</div>': '<div class="loading">⏳ 调用中...</div>');
+        chatArea.appendChild(card);
+        chatArea.scrollTop = chatArea.scrollHeight;
+        return card;
+    }
+
+    function sendMessage() {
+        const inputBox = document.getElementById('inputBox');
+        const sendBtn = document.getElementById('sendBtn');
+        const modelSelect = document.getElementById('modelSelect');
+        const message = inputBox.value.trim();
+
+        if (!message) return;
+
+        // 显示用户消息
+        appendMessage('user', message);
+        inputBox.value = '';
+        sendBtn.disabled = true;
+
+        // 创建助手消息容器（流式追加）
+        const chatArea = document.getElementById('chatArea');
+        const assistantDiv = document.createElement('div');
+        assistantDiv.className = 'message assistant';
+        chatArea.appendChild(assistantDiv);
+
+        // 收集工具卡片引用
+        const toolCards = [];
+
+        // 发 SSE 请求
+        fetch('/api/agent/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: sessionId || '',
+                message: message,
+                model: modelSelect.value
+            })
+        }).then(response => {
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let chunkCount = 0;
+
+            function read() {
+                return reader.read().then(({ done, value }) => {
+                    if (done) {
+                        sendBtn.disabled = false;
+                        return;
+                    }
+                    chunkCount++;
+                    const text = decoder.decode(value, { stream: true });
+                    buffer += text;
+
+                    // 按双空行分割 SSE 事件块
+                    const blocks = buffer.split('\n\n');
+                    buffer = blocks.pop();
+
+                    for (const block of blocks) {
+                        if (!block.trim()) continue;
+
+                        let eventType = '';
+                        let eventData = '';
+
+                        for (const line of block.split('\n')) {
+                            if (line.startsWith('event:')) {
+                                eventType = line.substring(6).trim();
+                            } else if (line.startsWith('data:')) {
+                                eventData = line.substring(5);
+                            }
+                        }
+
+                        if (eventType && eventData) {
+                            switch (eventType) {
+                                case 'content':
+                                    assistantDiv.textContent += eventData;
+                                    chatArea.scrollTop = chatArea.scrollHeight;
+                                    break;
+                                case 'tool_call':
+                                    try {
+                                        const tc = JSON.parse(eventData);
+                                        const name = tc.name || tc.function?.name || '未知工具';
+                                        const card = appendToolCard(name, null);
+                                        toolCards.push(card);
+                                    } catch (e) {
+                                        appendToolCard('工具调用', eventData);
+                                    }
+                                    break;
+                                case 'tool_result':
+                                    try {
+                                        const result = JSON.parse(eventData);
+                                        if (toolCards.length > 0) {
+                                            const card = toolCards[toolCards.length - 1];
+                                            card.innerHTML = '<div class="tool-name">🔧 ' + result.name + '</div>' +
+                                                '<div class="tool-result">✅ ' + result.result + '</div>';
+                                        }
+                                    } catch (e) {
+                                        console.error(e);
+                                    }
+                                    break;
+                                case 'done':
+                                    sendBtn.disabled = false;
+                                    chatArea.scrollTop = chatArea.scrollHeight;
+                                    break;
+                                case 'error':
+                                    appendMessage('system', '❌ ' + eventData);
+                                    break;
+                            }
+                        }
+                    }
+                    return read();
+                });
+            }
+            return read();
+        }).catch(err => {
+            console.error('fetch error:', err);
+            appendMessage('system', '❌ 连接失败：' + err.message);
+            sendBtn.disabled = false;
+        });
+    }
+</script>
+
+</body>
+</html>

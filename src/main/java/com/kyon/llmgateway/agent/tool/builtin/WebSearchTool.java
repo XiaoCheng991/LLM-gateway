@@ -52,7 +52,7 @@ public class WebSearchTool implements Tool {
         maxResults.put("type", "integer");
         maxResults.put("description", "返回结果条数，默认 5，最大 10");
 
-        params.putArray("required").add("query").add(maxResults);
+        params.putArray("required").add("query").add("max_results");
         return params;
     }
 
