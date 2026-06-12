@@ -61,8 +61,8 @@ public class FileIOTool implements Tool {
 
     @Override
     public String execute(JsonNode arguments) {
-        String action = arguments.get("action").asString();
-        String fileName = arguments.get("path").asString();
+        String action = arguments.path("action").asString();
+        String fileName = arguments.path("path").asString();
 
         // 安全检查：防止路径穿越
         if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
@@ -88,7 +88,7 @@ public class FileIOTool implements Tool {
                 log.info("Read file: {}, size: {}", fileName, content.length());
                 return content;
             } else if ("write".equals(action)) {
-                String content = arguments.get("content").asString("");
+                String content = arguments.path("content").asString("");
 
                 // 写入时自动创建子目录
                 Files.createDirectories(targetPath.getParent());

@@ -16,7 +16,21 @@ import javax.script.*;
 public class CalculatorTool implements Tool {
     private static final Logger log = LoggerFactory.getLogger(CalculatorTool.class);
     private static final ObjectMapper om = new ObjectMapper();
-    private final ScriptEngine engine = new ScriptEngineManager().getEngineByName("nashorn");
+    private static final ScriptEngine ENGINE;
+
+    static {
+        ScriptEngine eng = null;
+        try {
+            eng = new ScriptEngineManager().getEngineByName("nashorn");
+        } catch (Exception e) {
+            log.warn("无法加载 Nashorn 引擎，CalculatorTool 将无法使用, Nashorn removed in JDK 15", e);
+        }
+        ENGINE = eng;
+    }
+
+    private ScriptEngine getEngine() {
+        return ENGINE;
+    }
 
     @Override
     public String getName() {
@@ -44,7 +58,7 @@ public class CalculatorTool implements Tool {
 
     @Override
     public String execute(JsonNode arguments) {
-        String expr = arguments.get("expression").asString();
+        String expr = arguments.path("expression").asString();
 
         // 安全检查：只允许数字和运算符
         if (!expr.matches("[0-9+\\-*/().\\s]+")) {
@@ -52,6 +66,7 @@ public class CalculatorTool implements Tool {
         }
 
         try {
+            ScriptEngine engine = getEngine();
             // 判空
             if (engine != null) {
                 Object result = engine.eval(expr);

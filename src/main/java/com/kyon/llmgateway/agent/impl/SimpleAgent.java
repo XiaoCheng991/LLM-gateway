@@ -1,7 +1,6 @@
 package com.kyon.llmgateway.agent.impl;
 
 import com.kyon.llmgateway.agent.*;
-import com.kyon.llmgateway.agent.engine.ContextManager;
 import com.kyon.llmgateway.agent.engine.ToolEngine;
 import com.kyon.llmgateway.agent.engine.ToolResult;
 import com.kyon.llmgateway.agent.session.SessionManager;
@@ -172,10 +171,6 @@ public class SimpleAgent implements Agent {
                     emitter.accept(StreamEvent.toolResult(
                             "{\"name\":\"%s\",\"result\":\"%s\"}".formatted(r.getToolName(), r.getContent())
                     ));
-
-                    ToolCall tc = new ToolCall();
-                    tc.setId(r.getToolCallId());
-                    tc.setName(r.getToolName());
                 }
                 callCount++;
             }

@@ -39,7 +39,6 @@ public class DateTimeTool implements Tool {
         format.put("type", "string");
         format.put("description", "日期时间格式，默认 yyyy-MM-dd HH:mm:ss, 如yyyy-MM-dd、HH:mm:ss");
 
-        params.putArray("required"); // format 非必填
         return params;
     }
 
@@ -48,8 +47,8 @@ public class DateTimeTool implements Tool {
         String format = "yyyy-MM-dd HH:mm:ss";
 
         // 参数检查
-        if (arguments.has("format") && !arguments.get("format").isNull()) {
-            format = arguments.get("format").asString();
+        if (arguments.has("format") && !arguments.path("format").isNull()) {
+            format = arguments.path("format").asString();
         }
 
         try {

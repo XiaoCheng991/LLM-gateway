@@ -60,7 +60,7 @@ public abstract class BaseLLMAdapter implements LLMService {
 
     // ObjectMapper
     protected final ObjectMapper om = new ObjectMapper();
-    protected HttpClient client = HttpClient.newBuilder()
+    protected static final HttpClient CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(60))
             .build();
 
@@ -92,7 +92,7 @@ public abstract class BaseLLMAdapter implements LLMService {
 
         // 3. 发送请求（同步）
         long start = System.currentTimeMillis();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
         long latency = System.currentTimeMillis() - start;
 
         // 4. 解析响应, 解析为ChatResponse
@@ -101,7 +101,7 @@ public abstract class BaseLLMAdapter implements LLMService {
         // 校验错误
         if (root.has("error")) {
             throw new RuntimeException("API Error: " + root.path("error")
-                    .path("message").asString("unknow error"));
+                    .path("message").asString("unknown error"));
         }
 
         String content = root.path("choices").path(0)
@@ -115,8 +115,8 @@ public abstract class BaseLLMAdapter implements LLMService {
         // 解析 tool_calls
         JsonNode toolCallsNode = null;
         JsonNode messageNode = root.path("choices").path(0).path("message");
-        if (messageNode.has("tool_calls") && !messageNode.get("tool_calls").isNull()) {
-            toolCallsNode = messageNode.get("tool_calls");
+        if (messageNode.has("tool_calls") && !messageNode.path("tool_calls").isNull()) {
+            toolCallsNode = messageNode.path("tool_calls");
         }
 
         log.info("Chat completed - model: {}, inputTokens: {}, outputTokens: {}, latency: {}ms",
@@ -177,49 +177,46 @@ public abstract class BaseLLMAdapter implements LLMService {
                         .build();
 
                 // 2.3 用HttpClient.send() + BodyHandlers.ofInputStream() 获取流式响应
-                HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                HttpResponse<InputStream> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
 
                 // 2.4 逐行读取输入流
-                BufferedReader br = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8));
-
-                // 2.5 每行以 "data: " 开头时，提取后面的 JSON 字符串
-                String line;
-                while ((line = br.readLine()) != null) {
-                    if (line.startsWith("data: ")) {
-                        // 读到 "data: [DONE]" 时调用 emitter.complete() 结束
-                        String data = line.substring(6);
-                        if ("[DONE]".equals(data)) {
-                            emitter.complete();
-                            break;  // 退出线程
-                        }
-
-                        try {
-                            // 解析 JSON 拿到content，通过 emitter.send() 推给客户端
-                            JsonNode root = om.readTree(data);
-
-                            // 处理调用错误
-                            if (root.has("error")) {
-                                String errMsg = root.get("error").get("message").asString("unknow error");
-                                emitter.completeWithError(new RuntimeException("API Error: %s".formatted(errMsg)));
-                                return;
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+                    // 2.5 每行以 "data: " 开头时，提取后面的 JSON 字符串
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        if (line.startsWith("data: ")) {
+                            // 读到 "data: [DONE]" 时调用 emitter.complete() 结束
+                            String data = line.substring(6);
+                            if ("[DONE]".equals(data)) {
+                                emitter.complete();
+                                break;  // 退出线程
                             }
 
-                            // 没报错 就获取数据
-                            JsonNode delta = root.get("choices").get(0).get("delta");
-                            if (delta != null && delta.has("content")) {
-                                String content = delta.get("content").asString();
-                                emitter.send(content);
-                            }
-                        } catch (Exception parseErr) {
-                            // JSON 解析失败，继续下一行，不要中断流
-                            // 可以日志记录，但不要打断推送, 跳过无法解析的行，不影响后续推送
-                            log.warn("【SSE】parse error, skipping line: {}", line, parseErr);
-                        }
+                            try {
+                                // 解析 JSON 拿到content，通过 emitter.send() 推给客户端
+                                JsonNode root = om.readTree(data);
 
+                                // 处理调用错误
+                                if (root.has("error")) {
+                                    String errMsg = root.path("error").path("message").asString("unknown error");
+                                    emitter.completeWithError(new RuntimeException("API Error: %s".formatted(errMsg)));
+                                    return;
+                                }
+
+                                // 没报错 就获取数据
+                                JsonNode delta = root.path("choices").path(0).path("delta");
+                                if (delta != null && delta.has("content")) {
+                                    String content = delta.path("content").asString();
+                                    emitter.send(content);
+                                }
+                            } catch (Exception parseErr) {
+                                // JSON 解析失败，继续下一行，不要中断流
+                                // 可以日志记录，但不要打断推送, 跳过无法解析的行，不影响后续推送
+                                log.warn("【SSE】parse error, skipping line: {}", line, parseErr);
+                            }
+                        }
                     }
                 }
-                // emitter 流正常结束
-                emitter.complete();
             } catch (Exception e) {
                 log.error("Stream request failed - model: {}", modelName, e);
                emitter.completeWithError(e);
@@ -256,106 +253,109 @@ public abstract class BaseLLMAdapter implements LLMService {
         // 2. 发请求，拿流式响应
         long start = System.currentTimeMillis();
 
-        HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        HttpResponse<InputStream> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
 
         // 3. 逐行读，累计 content
-        BufferedReader br = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8));
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+            StringBuilder fullContent = new StringBuilder();
 
-        StringBuilder fullContent = new StringBuilder();
+            // 累计 tool_calls: key=index, value=拼接中的JSON
+            Map<Integer, StringBuilder> toolCallArgs = new HashMap<>();
+            Map<Integer, String> toolCallIds = new HashMap<>();
+            Map<Integer, String> toolCallNames = new HashMap<>();
+            String finishReason = "";
 
-        // 累计 tool_calls: key=index, value=拼接中的JSON
-        Map<Integer, StringBuilder> toolCallArgs = new HashMap<>();
-        Map<Integer, String> toolCallIds = new HashMap<>();
-        Map<Integer, String> toolCallNames = new HashMap<>();
-        String finishReason = "";
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (!line.startsWith("data: ")) continue;
 
-        String line;
-        while ((line = br.readLine()) != null) {
-            if (!line.startsWith("data: ")) continue;
+                String data = line.substring(6);
+                if ("[DONE]".equals(data)) break;
 
-            String data = line.substring(6);
-            if ("[DONE]".equals(data)) break;
+                try {
+                    JsonNode root = om.readTree(data);
 
-            try {
-                JsonNode root = om.readTree(data);
-
-                // 错误处理
-                if (root.has("error")) {
-                    String errMsg = root.path("error").path("message").asString("unknown error");
-                    throw new RuntimeException("API Error: %s".formatted(errMsg));
-                }
-                // 累计 delta content
-                // delta 就是增量，每次 SSE chunk 只包含当前新增的那一小块
-                JsonNode delta = root.path("choices").path(0).path("delta");
-                if (delta == null) continue;
-                if (delta.has("content")) {
-                    JsonNode contentNode = delta.path("content");
-                    String content = contentNode.asString();
-                    if (!content.isEmpty()) {
-                        fullContent.append(content);
-                        onContentDelta.accept(content); // 推给前端
+                    // 错误处理
+                    if (root.has("error")) {
+                        String errMsg = root.path("error").path("message").asString("unknown error");
+                        throw new RuntimeException("API Error: %s".formatted(errMsg));
                     }
-                }
-
-                // 累计 tool_calls
-                if (delta.has("tool_calls")) {
-                    for (JsonNode tc : delta.get("tool_calls")) {
-                        int index = tc.path("index").asInt();
-                        if (tc.has("id")) {
-                            toolCallIds.put(index, tc.path("id").asString());
-                        }
-                        if (tc.has("function") && tc.path("function").has("name")) {
-                            toolCallNames.put(index, tc.path("function").path("name").asString());
-                        }
-                        if (tc.has("function") && tc.path("function").has("arguments")) {
-                            String args = tc.path("function").path("arguments").toString();
-                            toolCallArgs.computeIfAbsent(index, k -> new StringBuilder()).append(args);
+                    // 累计 delta content
+                    // delta 就是增量，每次 SSE chunk 只包含当前新增的那一小块
+                    JsonNode delta = root.path("choices").path(0).path("delta");
+                    if (delta.isMissingNode() || delta.isNull()) continue;
+                    if (delta.has("content")) {
+                        JsonNode contentNode = delta.path("content");
+                        String content = contentNode.asString();
+                        if (!content.isEmpty()) {
+                            fullContent.append(content);
+                            onContentDelta.accept(content); // 推给前端
                         }
                     }
-                }
 
-                // finish_reason
-                JsonNode frNode = root.path("choices").path(0).path("finish_reason");
-                if (frNode != null && !frNode.isNull()) {
-                    finishReason = frNode.asString();
+                    // 累计 tool_calls
+                    if (delta.has("tool_calls")) {
+                        for (JsonNode tc : delta.path("tool_calls")) {
+                            int index = tc.path("index").asInt();
+                            if (tc.has("id")) {
+                                toolCallIds.put(index, tc.path("id").asString());
+                            }
+                            if (tc.has("function") && tc.path("function").has("name")) {
+                                toolCallNames.put(index, tc.path("function").path("name").asString());
+                            }
+                            if (tc.has("function") && tc.path("function").has("arguments")) {
+                                String args = tc.path("function").path("arguments").toString();
+                                toolCallArgs.computeIfAbsent(index, k -> new StringBuilder()).append(args);
+                            }
+                        }
+                    }
+
+                    // finish_reason
+                    JsonNode frNode = root.path("choices").path(0).path("finish_reason");
+                    if (frNode != null && !frNode.isNull()) {
+                        finishReason = frNode.asString();
+                    }
+                } catch (Exception parseErr) {
+                    log.warn("【SSE】parse error, skipping line: {}", line, parseErr);
                 }
-            } catch (Exception parseErr) {
-                log.warn("【SSE】parse error, skipping line: {}", line, parseErr);
+                log.debug("SSE line parsed, delta={}", data);
             }
-            log.debug("SSE line parsed, delta={}", data);
-        }
-        long latency = System.currentTimeMillis() - start;
+            long latency = System.currentTimeMillis() - start;
 
-        // 组装 tool_calls JSON
-        JsonNode toolCallsNode = null;
-        if (!toolCallIds.isEmpty()) {
-            List<JsonNode> toolCalls = new ArrayList<>();
-            for (int i = 0; i < toolCallIds.size(); i++) {
-                String id = toolCallIds.get(i);
-                String name = toolCallNames.get(i);
-                String args = toolCallArgs.getOrDefault(i, new StringBuilder()).toString();
+            // 组装 tool_calls JSON
+            JsonNode toolCallsNode = null;
+            if (!toolCallIds.isEmpty()) {
+                List<JsonNode> toolCalls = new ArrayList<>();
+                for (int i = 0; i < toolCallIds.size(); i++) {
+                    String id = toolCallIds.get(i);
+                    String name = toolCallNames.get(i);
+                    String args = toolCallArgs.getOrDefault(i, new StringBuilder()).toString();
 
-                // 组装成 OpenAI tool_calls 格式
-                JsonNode tcJson = om.readTree("""
+                    // 组装成 OpenAI tool_calls 格式
+                    JsonNode tcJson = om.readTree("""
                         {"id":"%s","type":"function","function":{"name":"%s","arguments":%s}}
                         """.formatted(id, name, args.isEmpty() ? "{}" : args));
-                toolCalls.add(tcJson);
+                    toolCalls.add(tcJson);
+                }
+                toolCallsNode = om.readTree(om.writeValueAsString(toolCalls));
             }
-            toolCallsNode = om.readTree(om.writeValueAsString(toolCalls));
+
+            // token 估算（流式响应没有 usage，用message和token估算）
+            int inputTokens = TokenCounter.estimateMessages(messages);
+            int outputTokens = TokenCounter.estimateTokens(fullContent.toString());
+
+            return ChatResponse.builder()
+                    .content(fullContent.toString())
+                    .model(modelName)
+                    .inputTokens(inputTokens)
+                    .outputTokens(outputTokens)
+                    .latency(latency)
+                    .finishReason(finishReason)
+                    .toolCalls(toolCallsNode)
+                    .build();
+        } catch (Exception e) {
+            log.error("Stream request failed - model: {}", modelName, e);
+            throw e;
         }
-
-        // token 估算（流式响应没有 usage，用message和token估算）
-        int inputTokens = TokenCounter.estimateMessages(messages);
-        int outputTokens = TokenCounter.estimateTokens(fullContent.toString());
-
-        return ChatResponse.builder()
-                .content(fullContent.toString())
-                .model(modelName)
-                .inputTokens(inputTokens)
-                .outputTokens(outputTokens)
-                .latency(latency)
-                .finishReason(finishReason)
-                .toolCalls(toolCallsNode)
-                .build();
     }
 }

@@ -26,9 +26,11 @@ public class LLMServiceFactory {
      */
     public LLMServiceFactory(List<LLMService> services) {
         this.providerMap = services.stream()
-                .filter(s -> s instanceof BaseLLMAdapter) // 只处理 BaseLLMAdapter 的子类
-                .map(s -> (BaseLLMAdapter) s)
-                .collect(Collectors.toMap(BaseLLMAdapter::getProviderName, Function.identity()));
+                .collect(Collectors.toMap(
+                        s -> s.getClass().getSimpleName(),             // KeyMap
+                        Function.identity(),                                      // ValueMap
+                        (existing, duplicate) -> existing   // 冲突时只保留一个
+                ));
     }
 
     /**

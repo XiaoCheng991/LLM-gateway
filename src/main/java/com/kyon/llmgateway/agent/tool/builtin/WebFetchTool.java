@@ -2,6 +2,7 @@ package com.kyon.llmgateway.agent.tool.builtin;
 
 import com.kyon.llmgateway.agent.tool.Tool;
 import com.kyon.llmgateway.agent.tool.ToolDef;
+import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -77,9 +78,7 @@ public class WebFetchTool implements Tool {
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             String body = response.body();
             // 去除 HTML 标签，只留文本
-            String text = body.replaceAll("<[^>]+>", " ")
-                    .replaceAll("\\s+", " ")
-                    .trim();
+            String text = Jsoup.parse(body).text();
 
             // 阶段3000个字符防止撑爆上下文
             if (text.length() > MAX_LENGTH) {

@@ -23,7 +23,7 @@ public class ContextManager {
         List<Message> result = new ArrayList<>();
         result.add(messages.getFirst()); // 保留第一条
         result.addAll(messages.subList(messages.size() - (MAX_MESSAGES - 1), messages.size())); // 保留最近的 N-1 条
-        return result;
+        return new ArrayList<>(result);
     }
 
     /** 按 token 数裁剪, 从最早的非 system 消息开始移除 */
@@ -35,6 +35,6 @@ public class ContextManager {
         while (com.kyon.llmgateway.agent.engine.TokenCounter.estimateMessages(result) > MAX_TOKENS && result.size() > 1) {
             result.remove(1);
         }
-        return result;
+        return new ArrayList<>(result);
     }
 }

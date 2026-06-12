@@ -37,9 +37,16 @@ public class ToolEngine {
                 continue;
             }
 
-            String callId = tc.get("id").asString();
-            String name = tc.get("function").get("name").asString();
-            String argStr = tc.get("function").get("arguments").asString();
+            String callId = tc.path("id").asString("");
+            JsonNode functionNode = tc.path("function");
+            if (callId.isEmpty() || functionNode.isNull()) {
+                log.warn("Invalid tool_call, skipping: {}", tc);
+                continue;
+            }
+
+            String name = functionNode.path("name").asString("");
+            String argStr = functionNode.path("arguments").isNull() ?
+                    "{}" : functionNode.path("arguments").toString();
 
             log.info("Executing tool: {}, callId: {}, args: {}", name, callId, argStr);
 
@@ -57,7 +64,7 @@ public class ToolEngine {
                 // 4. 收集结果
                 results.add(new ToolResult(callId, name, result));
                 log.info("Executing Tool {} result: {}", name, result);
-            } catch (IllegalArgumentException e) {
+            } catch (Exception e) {
                 log.error("Tool execution failed: {}", name, e);
                 results.add(new ToolResult(callId, name, "执行出错: " + e.getMessage()));
             }

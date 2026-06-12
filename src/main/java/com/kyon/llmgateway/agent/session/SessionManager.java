@@ -5,6 +5,7 @@ import com.kyon.llmgateway.model.Message;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,14 +37,17 @@ public class SessionManager {
         // 缓存 miss 未命中 -> 从 SQLite 加载
         List<Message> loaded = messageStore.load(sessionId);
         cache.put(sessionId, loaded);
-        return loaded;
+        return new ArrayList<>(loaded);
     }
 
     /**
      * 追加消息到会话
      */
     public void append(String sessionId, Message message) {
-        getOrCreate(sessionId).add(message);
+        List<Message> messages = getOrCreate(sessionId);
+        synchronized (messages) {
+            messages.add(message);
+        }
 
         // 同步写 SQLite
         messageStore.save(sessionId, message);
@@ -58,7 +62,7 @@ public class SessionManager {
         // 裁剪上下文, 需要接受返回值，返回的是一个新的 list
         messages = contextManager.truncate(messages);
         messages = contextManager.truncateByTokens(messages);
-        return messages;
+        return new ArrayList<>(messages);
     }
 
     /**
