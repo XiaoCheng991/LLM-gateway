@@ -48,7 +48,7 @@ public class FileIOTool implements Tool {
         action.put("description", "操作类型：\"read\" 读取文件, \"write\" 写入文件");
 
         ObjectNode path = properties.putObject("path");
-        path.put("type", "integer");
+        path.put("type", "string");
         path.put("description", "文件名（仅文件名，不包含目录路径，如在 " + WORKSPACE_DIR + "目录下)");
 
         ObjectNode content = properties.putObject("content");

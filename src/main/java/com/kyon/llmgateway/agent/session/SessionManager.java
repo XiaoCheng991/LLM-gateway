@@ -30,8 +30,18 @@ public class SessionManager {
      * 返回的是 原始的饮用，调用方可以 append() 追加消息
      */
     public List<Message> getOrCreate(String sessionId) {
-        // 先查缓存，更稳的写法
-        return cache.computeIfAbsent(sessionId, id -> new ArrayList<>(messageStore.load(id)));
+        // 双重检查 + 同步块，保证只 load 一次
+        List<Message> cached = cache.get(sessionId);
+        if (cached != null) return cached;
+        synchronized (cache) {
+            cached = cache.get(sessionId);
+            if (cached != null) return cached;
+            List<Message> loaded = new ArrayList<>(messageStore.load(sessionId));
+
+            // putIfAbsent 避免覆盖并发创建的
+            List<Message> existing = cache.putIfAbsent(sessionId, loaded);
+            return existing != null ? existing : loaded;
+        }
     }
 
     /**
