@@ -11,7 +11,8 @@ public enum ResultCode {
     PERMANENT_REDIRECT(308, "permanent redirect"),
     BAD_REQUEST(400, "bad request"),
     NOT_FOUND(404, "not found"),
-    INTERNAL_ERROR(500, "internal server error");
+    INTERNAL_ERROR(500, "internal server error"),
+    UNAUTHORIZED(401, "unauthorized");
 
     private final int code;
     private final String msg;

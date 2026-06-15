@@ -22,4 +22,13 @@ public class AgentRequest {
      * 模型名，如 deepseek-v4-pro
      */
     private String model;
+
+    /**
+     * Agent 模式，默认 REACT
+     */
+    private AgentMode mode = AgentMode.REACT;
+
+    public AgentMode getMode() {
+        return mode != null ? mode : AgentMode.REACT;
+    }
 }

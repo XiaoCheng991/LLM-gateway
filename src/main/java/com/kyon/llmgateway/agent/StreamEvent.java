@@ -7,11 +7,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class StreamEvent {
     public enum Type {
-        CONTENT,    // 内容增量
-        TOOL_CAL,   // 工具调用
-        TOOL_RESULT,// 工具结果
-        DONE,       // 完成
-        ERROR       // 错误
+        CONTENT,     // 内容增量
+        TOOL_CALL,   // 工具调用
+        TOOL_RESULT, // 工具结果
+        DONE,        // 完成
+        ERROR,       // 错误
+        THINKING,    // 思考内容（流式）
+        PLAN,        // 计划 JSON
+        STATE        // 状态变更
     }
 
     private Type type;
@@ -28,7 +31,7 @@ public class StreamEvent {
 
     public static StreamEvent toolCall(String toolCallJson) {
         StreamEvent event = new StreamEvent();
-        event.setType(Type.TOOL_CAL);
+        event.setType(Type.TOOL_CALL);
         event.setData(toolCallJson);
         return event;
     }
@@ -50,6 +53,27 @@ public class StreamEvent {
         StreamEvent event = new StreamEvent();
         event.setType(Type.ERROR);
         event.setData(error);
+        return event;
+    }
+
+    public static StreamEvent thinking(String thoughtDelta) {
+        StreamEvent event = new StreamEvent();
+        event.setType(Type.THINKING);
+        event.setRawContent(thoughtDelta);
+        return event;
+    }
+
+    public static StreamEvent plan(String planJson) {
+        StreamEvent event = new StreamEvent();
+        event.setType(Type.PLAN);
+        event.setData(planJson);
+        return event;
+    }
+
+    public static StreamEvent state(String stateName) {
+        StreamEvent event = new StreamEvent();
+        event.setType(Type.STATE);
+        event.setData(stateName);
         return event;
     }
 

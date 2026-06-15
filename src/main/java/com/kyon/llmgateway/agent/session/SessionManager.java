@@ -80,7 +80,8 @@ public class SessionManager {
 
     /**
      * 生成新会话 ID
-     * 完整 UUID 太长（36字符），截 16 位够用，碰撞概率极低 (2^64 分之一)
+     * 完整 UUID 太长（36字符），截 16 位 hex = 64 bit 熵
+     * 生产环境建议 24 位以上
      */
     public String newSessionId() {
         return UUID.randomUUID().toString()         // "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
