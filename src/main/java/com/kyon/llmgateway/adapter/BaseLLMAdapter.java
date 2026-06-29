@@ -5,8 +5,11 @@ import com.kyon.llmgateway.model.ChatRequest;
 import com.kyon.llmgateway.model.ChatResponse;
 import com.kyon.llmgateway.model.Message;
 import com.kyon.llmgateway.model.ToolDefinition;
+import com.kyon.llmgateway.observability.RateLimitExceededException;
+import com.kyon.llmgateway.observability.TokenBucketRateLimiter;
 import com.kyon.llmgateway.service.LLMService;
 import jakarta.annotation.PreDestroy;
+import jakarta.annotation.Resource;
 import lombok.Getter;
 import lombok.Setter;
 import org.slf4j.Logger;
@@ -39,6 +42,9 @@ import java.util.function.Consumer;
 public abstract class BaseLLMAdapter implements LLMService {
 
     private static final Logger log = LoggerFactory.getLogger(BaseLLMAdapter.class);
+
+    @Resource
+    private TokenBucketRateLimiter tokenBucketRateLimiter;
 
     @Value("${llm.sse-timeout:300000}") // 默认5分钟
     private long sseTimeout;
@@ -77,6 +83,14 @@ public abstract class BaseLLMAdapter implements LLMService {
     public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools) throws Exception {
         String modelName = getEffectiveModel();
         log.debug("Chat request - model: {}, messages: {}", modelName, userMsgList.size());
+
+        // 0. 非消耗性预检：看通里“现在”够不够，但不扣token
+        if (!tokenBucketRateLimiter.tryAcquireNonDestructive(getProviderName())) {
+            throw new RateLimitExceededException(
+                    getProviderName(),
+                    tokenBucketRateLimiter.getMaxTokensForProvider(getProviderName())
+            );
+        }
 
         // 1. 拼 JSON 请求体
         ChatRequest req = new ChatRequest(modelName, userMsgList, false, tools, "required");
@@ -122,6 +136,9 @@ public abstract class BaseLLMAdapter implements LLMService {
         log.info("Chat completed - model: {}, inputTokens: {}, outputTokens: {}, latency: {}ms",
                 model, inputTokens, outputTokens, latency);
 
+        // 5. 扣减 Token (Http 成功后才口 token，重试场景节省配额)
+        tokenBucketRateLimiter.recordSuccess(getProviderName());
+
         return ChatResponse.builder()
                 .content(content)
                 .model(model)
@@ -156,6 +173,10 @@ public abstract class BaseLLMAdapter implements LLMService {
     public SseEmitter stream(List<Message> userMsgList) {
         String modelName = currentModel;
         log.debug("Stream request - model: {}, messages: {}", modelName, userMsgList.size());
+        // 注意：流式接口暂不进入限流
+        // 业界惯例：SSE 长连接不适合令牌桶模型（连接持有时间长，扣Token时机不明确）
+        // 本项目流式 Token 计量也是估算
+        // 任何流式配额保护应在 AgentController 用 Semaphore 做并发数上限，而不是这里
 
         // 1. 创建 SseEmitter，设置 5 分钟超时
         SseEmitter emitter = new SseEmitter(sseTimeout);
@@ -237,6 +258,10 @@ public abstract class BaseLLMAdapter implements LLMService {
     public ChatResponse chatStreaming(List<Message> messages, List<ToolDefinition> tools, Consumer<String> onContentDelta) throws Exception {
         String modelName = getEffectiveModel();
         log.debug("Streaming chat request -  model: {}, messages: {}", modelName, messages.size());
+        // 注意：流式接口暂不进入限流
+        // 业界惯例：SSE 长连接不适合令牌桶模型（连接持有时间长，扣Token时机不明确）
+        // 本项目流式 Token 计量也是估算
+        // 任何流式配额保护应在 AgentController 用 Semaphore 做并发数上限，而不是这里
 
         // 1. 构建请求
         ChatRequest req = new ChatRequest(modelName, messages, true, tools, "required");

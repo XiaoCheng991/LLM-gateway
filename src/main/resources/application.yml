@@ -42,7 +42,14 @@ llm:
       provider: agnes
       status: active
 
-# SQLite 配置
+# SQLite 和 限流 配置
 agent:
   db:
     url: jdbc:sqlite:data/agent.db
+  rate-limit:
+    openrouter:
+      requests-per-minute: 100
+    nvidia:
+      requests-per-minute: 50
+    agnes:
+      requests-per-minute: 30
