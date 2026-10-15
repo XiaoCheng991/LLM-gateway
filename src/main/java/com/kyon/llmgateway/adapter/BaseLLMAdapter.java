@@ -144,6 +144,7 @@ public abstract class BaseLLMAdapter implements LLMService {
                 .model(model)
                 .inputTokens(inputTokens)
                 .outputTokens(outputTokens)
+                .estimated(false)
                 .latency(latency)     // 单位：毫秒
                 .finishReason(finishReason)
                 .toolCalls(toolCallsNode) // 直接传递 tool_calls 的 JsonNode
@@ -374,6 +375,7 @@ public abstract class BaseLLMAdapter implements LLMService {
                     .model(modelName)
                     .inputTokens(inputTokens)
                     .outputTokens(outputTokens)
+                    .estimated(true)
                     .latency(latency)
                     .finishReason(finishReason)
                     .toolCalls(toolCallsNode)

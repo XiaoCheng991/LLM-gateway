@@ -22,6 +22,9 @@ public class ChatResponse {
     // 输出 Token 数
     private Integer outputTokens;
 
+    // token 数是否为估算值：true 表示上游未返回 usage，由 TokenCounter 估算
+    private Boolean estimated;
+
     // 请求耗时（毫秒）
     private Long latency;
 
