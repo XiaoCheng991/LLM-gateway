@@ -76,11 +76,18 @@ public abstract class BaseLLMAdapter implements LLMService {
             Thread.ofVirtual().name("sse-stream-", 0).factory()
     );
 
+    @Override
+    public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools) throws Exception {
+        // 工具存在时默认 “auto”，否则不发 tool_choice 字段
+         String toolChoice = (tools == null || tools.isEmpty()) ? null : "auto";
+         return chat(userMsgList, tools, toolChoice);
+    }
+
     /**
      * 普通 Loop 调用请求
      */
     @Override
-    public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools) throws Exception {
+    public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools, String toolChoice) throws Exception {
         String modelName = getEffectiveModel();
         log.debug("Chat request - model: {}, messages: {}", modelName, userMsgList.size());
 
@@ -93,7 +100,6 @@ public abstract class BaseLLMAdapter implements LLMService {
         }
 
         // 1. 拼 JSON 请求体
-        String toolChoice = (tools == null || tools.isEmpty()) ? null : "auto";
         ChatRequest req = new ChatRequest(modelName, userMsgList, false, tools, toolChoice);
         String json = om.writeValueAsString(req);
 
@@ -172,7 +178,7 @@ public abstract class BaseLLMAdapter implements LLMService {
 
     // SSE 流式接口 - 默认实现，子类可覆盖
     @Override
-    public SseEmitter stream(List<Message> userMsgList) {
+    public SseEmitter stream(List<Message> userMsgList, List<ToolDefinition> tools) {
         String modelName = currentModel;
         log.debug("Stream request - model: {}, messages: {}", modelName, userMsgList.size());
         // 注意：流式接口暂不进入限流

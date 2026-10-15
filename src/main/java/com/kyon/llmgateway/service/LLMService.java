@@ -14,8 +14,16 @@ public interface LLMService {
     // Chat 方法 - 同步接口
     ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools) throws Exception;
 
-    // SSE 流失方法
-    SseEmitter stream(List<Message> userMsgList);
+    /**
+     * Chat 方法 - 同步接口，显式指定 tool_choice
+     * 用 default 方法做向后兼容：老实现方/老调用方无需改动
+     */
+    default ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools, String toolChoice) throws Exception {
+        return chat(userMsgList, tools);
+    }
+
+    // SSE 流式方法 --- 透传给上游，不执行 tool loop
+    SseEmitter stream(List<Message> userMsgList, List<ToolDefinition> tools);
 
     /**
      * 流式调用 LLM，同时累积完整响应，用于 Tool Loop
