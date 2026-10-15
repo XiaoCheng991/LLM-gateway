@@ -1,4 +1,3 @@
-Docs/*
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
@@ -49,3 +48,6 @@ logs/
 .agents*
 .codegraph*
 .claude*
+
+### dataBase ###
+data/*.db

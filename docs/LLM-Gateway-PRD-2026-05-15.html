@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM API Gateway · 产品需求文档 v1.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ========== RESET ========== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ========== BASE ========== */
+body {
+  font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f8f9fc;
+  color: #1a1d23;
+  line-height: 1.7;
+  font-size: 15.5px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ========== HERO ========== */
+.hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  padding: 64px 24px 48px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle at 30% 50%, rgba(59,130,246,0.06) 0%, transparent 50%),
+              radial-gradient(circle at 70% 50%, rgba(139,92,246,0.06) 0%, transparent 50%);
+  pointer-events: none;
+}
+.hero-badge {
+  display: inline-block;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 100px;
+  padding: 4px 14px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+.hero h1 {
+  font-size: 40px;
+  font-weight: 700;
+  color: #f1f5f9;
+  line-height: 1.2;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+}
+.hero .subtitle {
+  font-size: 18px;
+  color: #94a3b8;
+  font-weight: 400;
+  margin-bottom: 6px;
+}
+.hero-meta {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #64748b;
+}
+.hero-meta span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hero-meta .dot {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: #475569;
+}
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 28px;
+}
+.hero-stat {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 14px 24px;
+  text-align: center;
+  min-width: 110px;
+}
+.hero-stat .sv { font-size: 24px; font-weight: 700; color: #f1f5f9; }
+.hero-stat .sl { font-size: 11px; color: #64748b; margin-top: 2px; letter-spacing: 1px; text-transform: uppercase; }
+
+/* ========== CONTAINER ========== */
+.container {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+/* ========== TOC ========== */
+.toc {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 40px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.toc-title {
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.toc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 24px;
+}
+.toc-grid a {
+  color: #3b82f6;
+  text-decoration: none;
+  font-size: 14px;
+  padding: 4px 0;
+  transition: color 0.15s;
+}
+.toc-grid a:hover { color: #1d4ed8; text-decoration: underline; }
+
+/* ========== SECTION ========== */
+.section {
+  margin-bottom: 40px;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e2e8f0;
+}
+.section-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; height: 32px;
+  background: #3b82f6;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+h3 {
+  font-size: 17px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-top: 28px;
+  margin-bottom: 10px;
+}
+h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #334155;
+  margin-top: 20px;
+  margin-bottom: 8px;
+}
+
+p { margin-bottom: 12px; }
+ul, ol { margin: 8px 0 16px 22px; }
+li { margin-bottom: 5px; line-height: 1.7; }
+strong { color: #0f172a; }
+
+/* ========== INFO BOX ========== */
+.info-box {
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+  border-radius: 0 8px 8px 0;
+  padding: 14px 18px;
+  margin: 16px 0;
+}
+.info-box .ib-label {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #3b82f6;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.info-box p { margin-bottom: 4px; }
+.info-box p:last-child { margin-bottom: 0; }
+
+/* ========== TABLES ========== */
+.table-wrap {
+  overflow-x: auto;
+  margin: 16px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: #ffffff;
+}
+thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: #f8fafc; }
+
+/* ========== BADGES ========== */
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.badge.mvp {
+  background: #dcfce7;
+  color: #166534;
+}
+.badge.plan {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* ========== ARCH DIAGRAM ========== */
+.arch {
+  background: #0f172a;
+  border-radius: 10px;
+  padding: 20px;
+  margin: 16px 0;
+  overflow-x: auto;
+}
+.arch pre {
+  font-family: 'JetBrains Mono', 'Menlo', monospace;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: #cbd5e1;
+  white-space: pre;
+}
+.arch .hl { color: #60a5fa; }   /* layers */
+.arch .g { color: #34d399; }     /* gateways */
+.arch .o { color: #fbbf24; }     /* adapters */
+.arch .p { color: #a78bfa; }     /* providers */
+
+/* ========== CODE ========== */
+.code-block {
+  background: #0f172a;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: 14px 0;
+  overflow-x: auto;
+}
+.code-block pre {
+  font-family: 'JetBrains Mono', 'Menlo', monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #e2e8f0;
+  white-space: pre;
+}
+.copy-hint {
+  font-size: 11px;
+  color: #475569;
+  margin-top: 6px;
+  text-align: right;
+  font-family: 'Inter', sans-serif;
+}
+
+code {
+  font-family: 'JetBrains Mono', 'Menlo', monospace;
+  font-size: 13px;
+  background: #f1f5f9;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #1e293b;
+}
+.code-block code { background: transparent; padding: 0; color: inherit; }
+
+/* ========== METRIC CARDS ========== */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.metric-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+.metric-card .mv {
+  font-size: 20px;
+  font-weight: 700;
+  color: #3b82f6;
+}
+.metric-card .ml {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* ========== MILESTONE ========== */
+.milestone-list {
+  margin: 16px 0;
+}
+.milestone-item {
+  display: flex;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.milestone-item:last-child { border-bottom: none; }
+.milestone-dot {
+  flex-shrink: 0;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  margin-top: 6px;
+}
+.milestone-dot.green { background: #22c55e; }
+.milestone-dot.blue { background: #3b82f6; }
+.milestone-dot.purple { background: #8b5cf6; }
+.milestone-body { flex: 1; }
+.milestone-body h4 { margin: 0 0 2px 0; font-size: 14px; }
+.milestone-body .md {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+/* ========== RISK ========== */
+.risk-high { color: #dc2626; font-weight: 600; }
+.risk-mid { color: #d97706; font-weight: 600; }
+
+/* ========== REFERENCE CARDS ========== */
+.ref-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.ref-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+.ref-card .rc-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.ref-card .rc-name small {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 400;
+}
+.ref-card .rc-desc {
+  font-size: 13px;
+  color: #475569;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ========== FOOTER ========== */
+.footer {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid #e2e8f0;
+  text-align: center;
+}
+.footer-line {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 3px;
+}
+.footer-signoff {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 640px) {
+  .hero h1 { font-size: 28px; }
+  .hero-stats { flex-direction: column; align-items: center; }
+  .hero-stat { min-width: 80px; }
+  .toc-grid { grid-template-columns: 1fr; }
+  .container { padding: 24px 16px 48px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ========== HERO ========== -->
+<div class="hero">
+  <div class="hero-badge">📄 Product Requirements Document</div>
+  <h1>LLM API Gateway</h1>
+  <div class="subtitle">企业级多场景大模型 API 调用与能力测试平台</div>
+  <div class="hero-meta">
+    <span>Version 1.0</span><span class="dot"></span>
+    <span>2026-05-15</span><span class="dot"></span>
+    <span>行业调研驱动</span><span class="dot"></span>
+    <span>Java + Spring Boot</span>
+  </div>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="sv">8</div><div class="sl">功能模块</div></div>
+    <div class="hero-stat"><div class="sv">2</div><div class="sl">MVP 适配器</div></div>
+    <div class="hero-stat"><div class="sv">21</div><div class="sl">MVP 天</div></div>
+    <div class="hero-stat"><div class="sv">12</div><div class="sl">规划周</div></div>
+    <div class="hero-stat"><div class="sv">3</div><div class="sl">参考项目</div></div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ========== TOC ========== -->
+<div class="toc">
+  <div class="toc-title">📋 目录</div>
+  <div class="toc-grid">
+    <a href="#s1">1 · 产品概述</a>
+    <a href="#s2">2 · 功能需求</a>
+    <a href="#s3">3 · 系统架构</a>
+    <a href="#s4">4 · 技术栈</a>
+    <a href="#s5">5 · API 设计</a>
+    <a href="#s6">6 · 里程碑</a>
+    <a href="#s7">7 · 非功能需求</a>
+    <a href="#s8">8 · 风险</a>
+  </div>
+</div>
+
+<!-- ========== 1 ========== -->
+<div class="section" id="s1">
+  <div class="section-header">
+    <div class="section-number">1</div>
+    <div class="section-title">产品概述</div>
+  </div>
+
+  <h3>1.1 背景</h3>
+  <p>企业使用大模型时，面临以下核心痛点：</p>
+  <ol>
+    <li><strong>多模型管理混乱</strong> — 同一业务对比 OpenAI / Claude / DeepSeek / 本地模型，缺乏统一接入层</li>
+    <li><strong>成本不可控</strong> — 无法追踪每个 prompt 的 token 消耗、响应时间、成本分摊</li>
+    <li><strong>质量无保障</strong> — 模型升级后业务表现是否退化？缺少系统化评测手段</li>
+    <li><strong>安全性缺失</strong> — API Key 散落各处，Prompt 注入无防护</li>
+    <li><strong>切换成本高</strong> — 更换模型需修改代码，缺乏模型层抽象</li>
+  </ol>
+
+  <h3>1.2 目标</h3>
+  <p>构建统一的企业级 LLM API Gateway，实现：</p>
+  <ol>
+    <li><strong>统一接入</strong> — 对业务层屏蔽模型差异，提供一致的 OpenAI 兼容 API</li>
+    <li><strong>成本可观测</strong> — 全链路 token / 延迟 / 费用追踪</li>
+    <li><strong>质量评测</strong> — Prompt A/B 测试、模型对比、回归测试</li>
+    <li><strong>安全保障</strong> — API Key 集中管理 + Rate Limiting + Prompt 安全检测</li>
+    <li><strong>可扩展</strong> — 新增模型只需增加适配器，不侵入现有逻辑</li>
+  </ol>
+
+  <h3>1.3 目标用户</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>用户角色</th><th>使用场景</th></tr></thead>
+    <tbody>
+      <tr><td>Java 后端开发</td><td>集成 LLM 能力到现有业务系统</td></tr>
+      <tr><td>AI 应用开发者</td><td>测试不同模型 / Prompt 的效果对比</td></tr>
+      <tr><td>技术管理者</td><td>查看成本报表、质量趋势</td></tr>
+      <tr><td>QA 工程师</td><td>回归测试、Prompt 效果验证</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>1.4 行业调研</h3>
+  <div class="ref-grid">
+    <div class="ref-card">
+      <div class="rc-name">LiteLLM <small>47k⭐</small></div>
+      <div class="rc-desc">Python Proxy Server，100+ LLM 统一接口。行业标准方案。</div>
+    </div>
+    <div class="ref-card">
+      <div class="rc-name">Portkey Gateway <small>11.7k⭐</small></div>
+      <div class="rc-desc">轻量 AI Gateway，1600+ LLM 路由，50+ AI Guardrails。</div>
+    </div>
+    <div class="ref-card">
+      <div class="rc-name">Helicone <small>5.7k⭐</small></div>
+      <div class="rc-desc">LLM 可观测性平台，一行代码集成监控与评估。</div>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <div class="ib-label">🔍 选型策略</div>
+    <p>上述参考项目均为 <strong>Python / Node</strong> 实现。本项目选择 <strong>Java + Spring Boot</strong> 形成差异化：Java 21 虚拟线程原生支持高并发 I/O，Spring Boot 在企业级安全/监控/运维方面生态最为成熟，且与你的后端技能栈无缝衔接。</p>
+  </div>
+</div>
+
+<!-- ========== 2 ========== -->
+<div class="section" id="s2">
+  <div class="section-header">
+    <div class="section-number">2</div>
+    <div class="section-title">功能需求</div>
+  </div>
+
+  <h3>2.1 核心功能 (P0)</h3>
+
+  <h4>F1: 统一 Chat/Completion API</h4>
+  <ul>
+    <li><code>POST /api/v1/chat/completions</code> — OpenAI 兼容格式，支持流式 (SSE) 和非流式</li>
+    <li><code>GET /api/v1/models</code> — 列出所有可用模型</li>
+    <li><code>POST /api/v1/embeddings</code> — embedding 向量生成</li>
+  </ul>
+
+  <h4>F2: 多模型适配器</h4>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>适配器</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>OpenAI Adapter</td><td><span class="badge mvp">MVP</span></td><td>GPT-4o, GPT-4, GPT-3.5</td></tr>
+      <tr><td>DeepSeek Adapter</td><td><span class="badge mvp">MVP</span></td><td>DeepSeek-V3, DeepSeek-R1</td></tr>
+      <tr><td>Claude Adapter</td><td><span class="badge plan">规划</span></td><td>Claude Sonnet, Opus</td></tr>
+      <tr><td>Ollama Adapter</td><td><span class="badge plan">规划</span></td><td>qwen2, llama3 (本地)</td></tr>
+      <tr><td>Azure OpenAI</td><td><span class="badge plan">规划</span></td><td>企业 Azure 环境</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>F3: Prompt 模板管理</h4>
+  <ul>
+    <li>创建 / 编辑 / 删除 Prompt 模板</li>
+    <li>模板参数化（<code>{{variable}}</code> 插值）</li>
+    <li>模板版本管理（每次更新保留历史版本）</li>
+    <li>System Prompt + User Prompt 分层管理</li>
+  </ul>
+
+  <h4>F4: A/B 测试与模型对比</h4>
+  <ul>
+    <li>同 prompt 发送到多个模型，并排对比响应</li>
+    <li>对比维度：响应内容、延迟、token 消耗、成本</li>
+    <li>支持手动触发和 API 触发</li>
+  </ul>
+
+  <h4>F5: 基础监控</h4>
+  <div class="metric-grid">
+    <div class="metric-card"><div class="mv">QPS</div><div class="ml">请求量</div></div>
+    <div class="metric-card"><div class="mv">P50/95/99</div><div class="ml">延迟分位</div></div>
+    <div class="metric-card"><div class="mv">In/Out</div><div class="ml">Token 统计</div></div>
+    <div class="metric-card"><div class="mv">$</div><div class="ml">费用估算</div></div>
+    <div class="metric-card"><div class="mv">4xx/5xx</div><div class="ml">错误率</div></div>
+  </div>
+
+  <h3>2.2 增强功能 (P1)</h3>
+
+  <h4>F6: Prompt 评测 (Eval)</h4>
+  <ul>
+    <li>预置评测指标：响应长度、关键词匹配、格式验证</li>
+    <li>LLM-as-Judge 评测：用另一个大模型评估输出质量</li>
+    <li>评测报告：对比不同模型 / Prompt / 温度下的评分趋势</li>
+  </ul>
+
+  <h4>F7: Rate Limiting 与配额管理</h4>
+  <ul>
+    <li>按 API Key / 用户 / 模型维度限流</li>
+    <li>Token 级别配额控制</li>
+    <li>超限时降级策略（排队 / 拒绝 / 自动切换备用模型）</li>
+  </ul>
+
+  <h4>F8: 安全模块</h4>
+  <ul>
+    <li>API Key 自动轮转与加密存储</li>
+    <li>Prompt 注入检测（基于规则或 LLM）</li>
+    <li>PII / 敏感信息脱敏</li>
+    <li>审计日志：所有请求的完整链路追踪</li>
+  </ul>
+</div>
+
+<!-- ========== 3 ========== -->
+<div class="section" id="s3">
+  <div class="section-header">
+    <div class="section-number">3</div>
+    <div class="section-title">系统架构</div>
+  </div>
+
+  <h3>3.1 架构总览</h3>
+
+  <div class="arch">
+<pre><span class="hl">┌─ Client / SDK ──────────────────────────────────────────────┐</span>
+<span class="hl">│                        HTTP / SSE                           │</span>
+<span class="hl">└────────────────────────────┬────────────────────────────────┘</span>
+<span class="hl">                             ▼</span>
+<span class="g">┌─────────────────────────────────────────────────────────────┐</span>
+<span class="g">│                    API Gateway Layer                        │</span>
+<span class="g">│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │</span>
+<span class="g">│  │ Rate Limiter │  │ Auth Filter  │  │ Request Validator│  │</span>
+<span class="g">│  └──────────────┘  └──────────────┘  └──────────────────┘  │</span>
+<span class="g">└────────────────────────────┬────────────────────────────────┘</span>
+<span class="hl">                             ▼</span>
+<span class="g">┌─────────────────────────────────────────────────────────────┐</span>
+<span class="g">│                Router / Orchestrator                       │</span>
+<span class="g">│     Model Selector → Fallback Chain → Load Balancer        │</span>
+<span class="g">└────────────────────────────┬────────────────────────────────┘</span>
+<span class="hl">                             ▼</span>
+<span class="o">┌─────────────────────────────────────────────────────────────┐</span>
+<span class="o">│              Adapter Layer (Strategy Pattern)               │</span>
+<span class="o">│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐    │</span>
+<span class="o">│  │ OpenAI   │ │ DeepSeek │ │ Claude   │ │ Ollama ... │    │</span>
+<span class="o">│  │ Adapter  │ │ Adapter  │ │ Adapter  │ │ Adapter    │    │</span>
+<span class="o">│  └──────────┘ └──────────┘ └──────────┘ └────────────┘    │</span>
+<span class="o">└────────────────────────────┬────────────────────────────────┘</span>
+<span class="hl">                             ▼</span>
+<span class="p">┌─────────────────────────────────────────────────────────────┐</span>
+<span class="p">│                    External LLM APIs                        │</span>
+<span class="p">│   OpenAI    DeepSeek    Claude    Ollama    Azure OpenAI     │</span>
+<span class="p">└─────────────────────────────────────────────────────────────┘</span>
+<span class="hl">                             </span>
+<span class="g">┌─────────────────────────────────────────────────────────────┐</span>
+<span class="g">│                    Observability Layer                      │</span>
+<span class="g">│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │</span>
+<span class="g">│  │   Metrics    │  │     Logs     │  │   Cost Tracker   │  │</span>
+<span class="g">│  └──────────────┘  └──────────────┘  └──────────────────┘  │</span>
+<span class="g">└─────────────────────────────────────────────────────────────┘</span></pre>
+  </div>
+
+  <h3>3.2 设计原则</h3>
+  <ol>
+    <li><strong>适配器模式</strong> — LLMService 接口定义契约，各 Provider 实现 Adapter</li>
+    <li><strong>工厂模式</strong> — LLMServiceFactory 根据 modelId 动态返回对应实现</li>
+    <li><strong>责任链模式</strong> — 请求处理管线（Auth → Rate Limit → Validator → Router）</li>
+    <li><strong>OpenAPI 兼容</strong> — 对外暴露 OpenAI 一致的 API 格式</li>
+    <li><strong>无状态设计</strong> — Gateway 层无状态，水平扩展只加实例</li>
+  </ol>
+
+  <h3>3.3 数据流</h3>
+  <div class="code-block">
+<pre>Client
+  → POST /api/v1/chat/completions { model, messages, stream }
+  → Auth Filter (校验 API Key)
+  → Rate Limiter (检查配额)
+  → Request Validator (参数校验)
+  → Model Selector (根据 model 选择适配器)
+  → LLMService.send() / stream()
+    → Adapter 转换请求格式
+    → HTTP 调用外部 LLM API
+    → Adapter 转换响应格式
+  → Metrics Collector (记录延迟 / token / 成本)
+  → Response (JSON / SSE stream)</pre>
+  </div>
+</div>
+
+<!-- ========== 4 ========== -->
+<div class="section" id="s4">
+  <div class="section-header">
+    <div class="section-number">4</div>
+    <div class="section-title">技术栈</div>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>层级</th><th>技术</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>框架</td><td>Spring Boot 3.x</td><td>Java 21 + WebFlux（流式支持）</td></tr>
+      <tr><td>API 文档</td><td>SpringDoc OpenAPI</td><td>自动生成 Swagger 文档</td></tr>
+      <tr><td>数据库</td><td>H2 (dev) / PostgreSQL (prod)</td><td>模板 / 配置 / 历史记录</td></tr>
+      <tr><td>缓存</td><td>Caffeine (本地) / Redis</td><td>模型配置 / 限流计数器</td></tr>
+      <tr><td>流式</td><td>SSE (Server-Sent Events)</td><td>兼容 OpenAI 流式格式</td></tr>
+      <tr><td>评测</td><td>LLM-as-Judge</td><td>用模型评测模型</td></tr>
+      <tr><td>监控</td><td>Micrometer + Prometheus</td><td>JVM 指标 + 请求指标</td></tr>
+      <tr><td>构建</td><td>Maven</td><td>依赖管理</td></tr>
+      <tr><td>测试</td><td>JUnit 5 + Mockito + Testcontainers</td><td>单元 + 集成测试</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ========== 5 ========== -->
+<div class="section" id="s5">
+  <div class="section-header">
+    <div class="section-number">5</div>
+    <div class="section-title">API 设计</div>
+  </div>
+
+  <h3>5.1 Chat Completion</h3>
+
+  <div class="code-block">
+<pre><span style="color:#60a5fa;">POST</span> /api/v1/chat/completions
+<span style="color:#f472b6;">Content-Type</span>: application/json
+<span style="color:#f472b6;">Authorization</span>: Bearer &lt;api-key&gt;
+
+{
+  <span style="color:#34d399;">"model"</span>: <span style="color:#fbbf24;">"deepseek-chat"</span>,
+  <span style="color:#34d399;">"messages"</span>: [
+    {<span style="color:#34d399;">"role"</span>: <span style="color:#fbbf24;">"system"</span>, <span style="color:#34d399;">"content"</span>: <span style="color:#fbbf24;">"你是一个专业的 Java 技术顾问..."</span>},
+    {<span style="color:#34d399;">"role"</span>: <span style="color:#fbbf24;">"user"</span>, <span style="color:#34d399;">"content"</span>: <span style="color:#fbbf24;">"请解释 Spring Boot 自动配置的原理"</span>}
+  ],
+  <span style="color:#34d399;">"temperature"</span>: 0.7,
+  <span style="color:#34d399;">"max_tokens"</span>: 2048,
+  <span style="color:#34d399;">"stream"</span>: <span style="color:#f472b6;">false</span>
+}</pre>
+  </div>
+
+  <div class="code-block">
+<pre>{
+  <span style="color:#34d399;">"id"</span>: <span style="color:#fbbf24;">"chatcmpl-abc123"</span>,
+  <span style="color:#34d399;">"object"</span>: <span style="color:#fbbf24;">"chat.completion"</span>,
+  <span style="color:#34d399;">"created"</span>: 1747296000,
+  <span style="color:#34d399;">"model"</span>: <span style="color:#fbbf24;">"deepseek-chat"</span>,
+  <span style="color:#34d399;">"choices"</span>: [{
+    <span style="color:#34d399;">"index"</span>: 0,
+    <span style="color:#34d399;">"message"</span>: {
+      <span style="color:#34d399;">"role"</span>: <span style="color:#fbbf24;">"assistant"</span>,
+      <span style="color:#34d399;">"content"</span>: <span style="color:#fbbf24;">"Spring Boot 的自动配置通过 @EnableAutoConfiguration..."</span>
+    },
+    <span style="color:#34d399;">"finish_reason"</span>: <span style="color:#fbbf24;">"stop"</span>
+  }],
+  <span style="color:#34d399;">"usage"</span>: {
+    <span style="color:#34d399;">"prompt_tokens"</span>: 45,
+    <span style="color:#34d399;">"completion_tokens"</span>: 220,
+    <span style="color:#34d399;">"total_tokens"</span>: 265,
+    <span style="color:#34d399;">"estimated_cost"</span>: 0.0012
+  },
+  <span style="color:#34d399;">"provider"</span>: <span style="color:#fbbf24;">"deepseek"</span>,
+  <span style="color:#34d399;">"latency_ms"</span>: 2340
+}</pre>
+  </div>
+
+  <h3>5.2 模型列表</h3>
+
+  <div class="code-block">
+<pre><span style="color:#60a5fa;">GET</span> /api/v1/models
+
+{
+  <span style="color:#34d399;">"data"</span>: [
+    {<span style="color:#34d399;">"id"</span>: <span style="color:#fbbf24;">"gpt-4o"</span>,        <span style="color:#34d399;">"provider"</span>: <span style="color:#fbbf24;">"openai"</span>,   <span style="color:#34d399;">"type"</span>: <span style="color:#fbbf24;">"chat"</span>, <span style="color:#34d399;">"status"</span>: <span style="color:#fbbf24;">"active"</span>},
+    {<span style="color:#34d399;">"id"</span>: <span style="color:#fbbf24;">"deepseek-chat"</span>,  <span style="color:#34d399;">"provider"</span>: <span style="color:#fbbf24;">"deepseek"</span>, <span style="color:#34d399;">"type"</span>: <span style="color:#fbbf24;">"chat"</span>, <span style="color:#34d399;">"status"</span>: <span style="color:#fbbf24;">"active"</span>},
+    {<span style="color:#34d399;">"id"</span>: <span style="color:#fbbf24;">"deepseek-reasoner"</span>,<span style="color:#34d399;">"provider"</span>: <span style="color:#fbbf24;">"deepseek"</span>, <span style="color:#34d399;">"type"</span>: <span style="color:#fbbf24;">"chat"</span>, <span style="color:#34d399;">"status"</span>: <span style="color:#fbbf24;">"beta"</span>},
+    {<span style="color:#34d399;">"id"</span>: <span style="color:#fbbf24;">"claude-sonnet-4"</span>,<span style="color:#34d399;">"provider"</span>: <span style="color:#fbbf24;">"claude"</span>,  <span style="color:#34d399;">"type"</span>: <span style="color:#fbbf24;">"chat"</span>, <span style="color:#34d399;">"status"</span>: <span style="color:#fbbf24;">"planned"</span>}
+  ]
+}</pre>
+  </div>
+</div>
+
+<!-- ========== 6 ========== -->
+<div class="section" id="s6">
+  <div class="section-header">
+    <div class="section-number">6</div>
+    <div class="section-title">里程碑</div>
+  </div>
+
+  <h3>MVP — 第 1-3 周</h3>
+
+  <div class="milestone-list">
+    <div class="milestone-item">
+      <div class="milestone-dot green"></div>
+      <div class="milestone-body">
+        <h4>Day 1-2 · 项目骨架搭建</h4>
+        <div class="md">Spring Boot 项目 + 目录结构 + 基础配置</div>
+      </div>
+    </div>
+    <div class="milestone-item">
+      <div class="milestone-dot green"></div>
+      <div class="milestone-body">
+        <h4>Day 3-4 · 核心接口定义</h4>
+        <div class="md">LLMService 接口 + ChatRequest / Response 模型</div>
+      </div>
+    </div>
+    <div class="milestone-item">
+      <div class="milestone-dot green"></div>
+      <div class="milestone-body">
+        <h4>Day 5-7 · OpenAI 适配器</h4>
+        <div class="md">OpenAI Adapter 实现 + Chat Completion 端点</div>
+      </div>
+    </div>
+    <div class="milestone-item">
+      <div class="milestone-dot green"></div>
+      <div class="milestone-body">
+        <h4>Day 8-10 · DeepSeek 适配器</h4>
+        <div class="md">DeepSeek Adapter + 工厂模式整合</div>
+      </div>
+    </div>
+    <div class="milestone-item">
+      <div class="milestone-dot green"></div>
+      <div class="milestone-body">
+        <h4>Day 11 · 模型列表 API</h4>
+        <div class="md">GET /api/v1/models</div>
+      </div>
+    </div>
+    <div class="milestone-item">
+      <div class="milestone-dot green"></div>
+      <div class="milestone-body">
+        <h4>Day 12-13 · 基础监控</h4>
+        <div class="md">Metrics 采集（延迟 / token / 成本）</div>
+      </div>
+    </div>
+    <div class="milestone-item">
+      <div class="milestone-dot green"></div>
+      <div class="milestone-body">
+        <h4>Day 14-15 · 流式响应</h4>
+        <div class="md">SSE 流式支持</div>
+      </div>
+    </div>
+    <div class="milestone-item">
+      <div class="milestone-dot green"></div>
+      <div class="milestone-body">
+        <h4>Day 16-17 · 测试 + 文档</h4>
+        <div class="md">单元测试 + API 文档 + Docker 启动脚本</div>
+      </div>
+    </div>
+    <div class="milestone-item">
+      <div class="milestone-dot green"></div>
+      <div class="milestone-body">
+        <h4>Day 18-21 · MVP 验收</h4>
+        <div class="md">3 个核心 API 可用 + 2 个模型适配器 + 基础监控</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>V1.0 — 第 4-7 周</h3>
+  <div class="milestone-list">
+    <div class="milestone-item">
+      <div class="milestone-dot blue"></div>
+      <div class="milestone-body">
+        <div class="md">Prompt 模板管理 · A/B 对比测试 · Eval 评测 · Rate Limiting · 安全模块</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>V2.0 — 第 8-12 周</h3>
+  <div class="milestone-list">
+    <div class="milestone-item">
+      <div class="milestone-dot purple"></div>
+      <div class="milestone-body">
+        <div class="md">Claude / Ollama 适配器 · 缓存 · 负载均衡 · Webhook · 管理后台 UI（可选）</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 7 ========== -->
+<div class="section" id="s7">
+  <div class="section-header">
+    <div class="section-number">7</div>
+    <div class="section-title">非功能需求</div>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>维度</th><th>要求</th><th>度量方式</th></tr></thead>
+    <tbody>
+      <tr><td>性能</td><td>P99 延迟 &lt; 200ms（不含 LLM 调用）</td><td>Micrometer + Grafana</td></tr>
+      <tr><td>可用性</td><td>99.9%（Gateway 层）</td><td>健康检查 + 熔断</td></tr>
+      <tr><td>吞吐</td><td>单实例 1000 QPS</td><td>JMeter / k6 压测</td></tr>
+      <tr><td>安全</td><td>API Key 加密存储 + 传输加密</td><td>审计 + 渗透测试</td></tr>
+      <tr><td>可扩展</td><td>新增适配器 ≤ 1 人日</td><td>代码审查</td></tr>
+      <tr><td>可观测</td><td>全链路 trace ID 追踪</td><td>结构化日志 + Metrics</td></tr>
+      <tr><td>兼容性</td><td>OpenAI API 兼容度 ≥ 90%</td><td>兼容性测试套件</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ========== 8 ========== -->
+<div class="section" id="s8">
+  <div class="section-header">
+    <div class="section-number">8</div>
+    <div class="section-title">风险</div>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>风险</th><th>概率</th><th>影响</th><th>缓解措施</th></tr></thead>
+    <tbody>
+      <tr><td>LLM API 不稳定</td><td class="risk-high">高</td><td>中</td><td>熔断 + 重试 + 备用模型</td></tr>
+      <tr><td>流式响应中断</td><td class="risk-mid">中</td><td class="risk-high">高</td><td>自动重连 + 断点续传</td></tr>
+      <tr><td>Token 成本失控</td><td class="risk-mid">中</td><td class="risk-high">高</td><td>实时配额 + 预算告警</td></tr>
+      <tr><td>Prompt 注入</td><td>低</td><td class="risk-high">高</td><td>输入过滤 + LLM 检测</td></tr>
+      <tr><td>模型版本影响</td><td class="risk-mid">中</td><td class="risk-mid">中</td><td>Pin 版本 + 回归测试</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ========== FOOTER ========== -->
+<div class="footer">
+  <div class="footer-line">Generated by Hermes Agent · 凌星晚 2.0</div>
+  <div class="footer-line">参考项目：LiteLLM (47k⭐) · Portkey Gateway (11.7k⭐) · Helicone (5.7k⭐)</div>
+  <div class="footer-line">2026-05-15 · Product Requirements Document v1.0</div>
+  <div class="footer-signoff">☕ 强子，文档钉在这里了，接下来每一步都按它走。</div>
+</div>
+
+</div>
+</body>
+</html>

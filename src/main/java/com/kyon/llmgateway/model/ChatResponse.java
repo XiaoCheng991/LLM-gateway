@@ -25,7 +25,7 @@ public class ChatResponse {
     // 请求耗时（毫秒）
     private Long latency;
 
-    // "stop" 标识正常结束， "tool_call" 标识需要调用工
+    // "stop" 标识正常结束， "tool_call" 标识需要调用工具
     private String finishReason;
 
     // LLM 返回的 tool_calls 数组，null 表示不需要调工具
