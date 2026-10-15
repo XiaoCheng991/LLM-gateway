@@ -93,7 +93,8 @@ public abstract class BaseLLMAdapter implements LLMService {
         }
 
         // 1. 拼 JSON 请求体
-        ChatRequest req = new ChatRequest(modelName, userMsgList, false, tools, "required");
+        String toolChoice = (tools == null || tools.isEmpty()) ? null : "auto";
+        ChatRequest req = new ChatRequest(modelName, userMsgList, false, tools, toolChoice);
         String json = om.writeValueAsString(req);
 
         // 2. 构建 POST 请求
@@ -265,7 +266,8 @@ public abstract class BaseLLMAdapter implements LLMService {
         // 任何流式配额保护应在 AgentController 用 Semaphore 做并发数上限，而不是这里
 
         // 1. 构建请求
-        ChatRequest req = new ChatRequest(modelName, messages, true, tools, "required");
+        String toolChoice = (tools == null || tools.isEmpty()) ? null : "auto";
+        ChatRequest req = new ChatRequest(modelName, messages, true, tools, toolChoice);
         String json = om.writeValueAsString(req);
 
         HttpRequest request = HttpRequest.newBuilder()
