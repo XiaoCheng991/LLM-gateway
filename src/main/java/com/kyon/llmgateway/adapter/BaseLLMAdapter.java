@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -29,13 +30,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 @Component
@@ -176,24 +175,40 @@ public abstract class BaseLLMAdapter implements LLMService {
         }
     }
 
-    // SSE 流式接口 - 默认实现，子类可覆盖
+    /**
+     * OpenAI 兼容 SSE 流式转发。
+     * 帧格式：data: {"id":"chatcmpl-..","object":"chat.completion.chunk","created":..,
+     *              "model":"..","choices":[{"index":0,"delta":{...},"finish_reason":null}]}
+     * 结尾：   finish_reason 帧 → usage 帧 → data: [DONE]
+     * 不执行 tool loop：上游返回的 delta.tool_calls 原样透传给客户端。
+     */
     @Override
     public SseEmitter stream(List<Message> userMsgList, List<ToolDefinition> tools) {
         String modelName = currentModel;
         log.debug("Stream request - model: {}, messages: {}", modelName, userMsgList.size());
-        // 注意：流式接口暂不进入限流
-        // 业界惯例：SSE 长连接不适合令牌桶模型（连接持有时间长，扣Token时机不明确）
-        // 本项目流式 Token 计量也是估算
-        // 任何流式配额保护应在 AgentController 用 Semaphore 做并发数上限，而不是这里
 
         // 1. 创建 SseEmitter，设置 5 分钟超时
         SseEmitter emitter = new SseEmitter(sseTimeout);
 
+        // 客户端断开/超时/出错 -> 置位，读取循环据此提前退出并关闭上游连接
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        emitter.onCompletion(() -> cancelled.set(true));
+        emitter.onTimeout(() -> cancelled.set(true));
+        emitter.onError((e) -> cancelled.set(true));
+
         // 2. 启动新线程执行流式请求
         executor.submit(() -> {
+            String chunkId = "chatcmpl-" + UUID.randomUUID();
+            long created = System.currentTimeMillis() / 1000;
+            int promptTokens = 0;
+            int completionTokens = 0;
+            String finishReason = null;
+            boolean sawUsage = false;
+
             try {
                 // 2.1. 发起 HTTP POST 请求，请求体里加 "stream": true
-                ChatRequest req = new ChatRequest(modelName, userMsgList, true, null, null);
+                String toolChoice = (tools == null || tools.isEmpty()) ? null : "auto";
+                ChatRequest req = new ChatRequest(modelName, userMsgList, true, null, toolChoice);
                 String json = om.writeValueAsString(req);
 
                 // 2.2 设置请求头 Accept：text/event-stream
@@ -208,47 +223,100 @@ public abstract class BaseLLMAdapter implements LLMService {
                 // 2.3 用HttpClient.send() + BodyHandlers.ofInputStream() 获取流式响应
                 HttpResponse<InputStream> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
 
+                // 上游 HTTP 层错误（4xx/5xx）
+                if (response.statusCode() >= 400) {
+                    String errBody = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
+                    emitter.send(SseEmitter.event().data(errorChunk(chunkId, modelName, created, errBody)));
+                    emitter.send(SseEmitter.event().data("[DONE]"));
+                    emitter.complete();
+                    return;
+                }
+
+                promptTokens = TokenCounter.estimateMessages(userMsgList);
+
                 // 2.4 逐行读取输入流
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
                     // 2.5 每行以 "data: " 开头时，提取后面的 JSON 字符串
                     String line;
                     while ((line = br.readLine()) != null) {
-                        if (line.startsWith("data: ")) {
-                            // 读到 "data: [DONE]" 时调用 emitter.complete() 结束
-                            String data = line.substring(6);
-                            if ("[DONE]".equals(data)) {
-                                emitter.complete();
-                                break;  // 退出线程
-                            }
-
-                            try {
-                                // 解析 JSON 拿到content，通过 emitter.send() 推给客户端
-                                JsonNode root = om.readTree(data);
-
-                                // 处理调用错误
-                                if (root.has("error")) {
-                                    String errMsg = root.path("error").path("message").asString("unknown error");
-                                    emitter.completeWithError(new RuntimeException("API Error: %s".formatted(errMsg)));
-                                    return;
-                                }
-
-                                // 没报错 就获取数据
-                                JsonNode delta = root.path("choices").path(0).path("delta");
-                                if (delta != null && delta.has("content")) {
-                                    String content = delta.path("content").asString();
-                                    emitter.send(content);
-                                }
-                            } catch (Exception parseErr) {
-                                // JSON 解析失败，继续下一行，不要中断流
-                                // 可以日志记录，但不要打断推送, 跳过无法解析的行，不影响后续推送
-                                log.warn("【SSE】parse error, skipping line: {}", line, parseErr);
-                            }
+                        // 客户端已经断开：return 会触发 try-with-resources 关闭
+                        if (cancelled.get()) {
+                            log.info("Client disconnected, closing upstream - model: {}", modelName);
+                            return;
                         }
+
+                        if (!line.startsWith("data: ")) continue;
+
+                        // 读到 "data: [DONE]" 时调用 emitter.complete() 结束
+                        String data = line.substring(6);
+                        if ("[DONE]".equals(data)) break;
+
+                        JsonNode root;
+                        try {
+                            // 解析 JSON 拿到content，通过 emitter.send() 推给客户端
+                            root = om.readTree(data);
+                        } catch (Exception parseErr) {
+                            // JSON 解析失败，继续下一行，不要中断流
+                            // 可以日志记录，但不要打断推送, 跳过无法解析的行，不影响后续推送
+                            log.warn("【SSE】parse error, skipping line: {}", line, parseErr);
+                            continue;
+                        }
+
+                        // 处理调用错误
+                        if (root.has("error")) {
+                            String errMsg = root.path("error").path("message").asString("unknown error");
+                            emitter.send(SseEmitter.event().data(errorChunk(chunkId, modelName, created, errMsg)));
+                            emitter.send(SseEmitter.event().data("[DONE]"));
+                            emitter.complete();
+                            return;
+                        }
+
+                        JsonNode choices = root.path("choices");
+                        if (!choices.isArray() || choices.isEmpty()) continue;
+                        JsonNode choice = choices.get(0);
+
+                        // 上游给真实 usage 就用真实值
+                        JsonNode usageNode = root.path("usage");
+                        if (!usageNode.isMissingNode() && !usageNode.isNull()) {
+                            promptTokens = usageNode.path("prompt_tokens").asInt(promptTokens);
+                            completionTokens = usageNode.path("completion_tokens").asInt(completionTokens);
+                            sawUsage = true;
+                        }
+
+                        JsonNode fr = choice.path("finish_reason");
+                        if (!fr.isMissingNode() && !fr.isNull()) finishReason = fr.asString();
+
+                        JsonNode delta = choice.path("delta");
+                        if (delta.isMissingNode() || delta.isNull() || delta.isEmpty()) continue;
+
+                        // content 存在则累加估算 token：tool_choices 原样透传
+                        String piece = delta.path("content").asString("");
+                        if (!piece.isEmpty()) completionTokens += TokenCounter.estimateTokens(piece);
+
+                        emitter.send(SseEmitter.event().data(chunk(chunkId, modelName, created, delta, finishReason)));
                     }
                 }
+
+                if (finishReason == null) finishReason = "stop";
+
+                // 结束帧：finish_reason（delta 为空对象）
+                emitter.send(SseEmitter.event().data(
+                        chunk(chunkId, modelName, created, om.createObjectNode(), finishReason)));
+                // usage 帧（sawUsage=false 时 completionTokens 已由 content 累加得出）
+                emitter.send(SseEmitter.event().data(
+                        usageChunk(chunkId, modelName, created, promptTokens, completionTokens)));
+                emitter.send(SseEmitter.event().data("[DONE]"));
+                emitter.complete();
+
             } catch (Exception e) {
                 log.error("Stream request failed - model: {}", modelName, e);
-               emitter.completeWithError(e);
+                try {
+                    emitter.send(SseEmitter.event().data(errorChunk(chunkId, modelName, created, e.getMessage())));
+                    emitter.send(SseEmitter.event().data("[DONE]"));
+                    emitter.complete();
+                } catch (Exception ignore) {
+                    log.debug("Failed to deliver error frame", ignore);
+                }
             }
         });
 
@@ -322,8 +390,10 @@ public abstract class BaseLLMAdapter implements LLMService {
                         JsonNode contentNode = delta.path("content");
                         String content = contentNode.asString();
                         if (!content.isEmpty()) {
-                            fullContent.append(content);
-                            onContentDelta.accept(content); // 推给前端
+
+                            // ===== Core 重点 =====
+                            fullContent.append(content);    // 存一份
+                            onContentDelta.accept(content); // 通道 A：数据出口一（推给前端）
                         }
                     }
 
@@ -376,10 +446,10 @@ public abstract class BaseLLMAdapter implements LLMService {
 
             // token 估算（流式响应没有 usage，用message和token估算）
             int inputTokens = TokenCounter.estimateMessages(messages);
-            int outputTokens = TokenCounter.estimateTokens(fullContent.toString());
+            int outputTokens = TokenCounter.estimateTokens(fullContent.toString()); // 用通道 A 时存的那份
 
             return ChatResponse.builder()
-                    .content(fullContent.toString())
+                    .content(fullContent.toString())    // 通道 B：数据出口二（stream完成后攒够了一次性返回交给程序决策）
                     .model(modelName)
                     .inputTokens(inputTokens)
                     .outputTokens(outputTokens)
@@ -391,6 +461,62 @@ public abstract class BaseLLMAdapter implements LLMService {
         } catch (Exception e) {
             log.error("Stream request failed - model: {}", modelName, e);
             throw e;
+        }
+    }
+
+    // --------- SSE 帧构造（OpenAI chat.completion.chunk 格式）---------
+
+    /** 普通帧：content / tool_calls 透传，或结束时的 finish_reason */
+    private String chunk(String id, String model, long created, JsonNode delta, String finishReason) {
+        try {
+            ObjectNode root = om.createObjectNode();
+            root.put("id", id);
+            root.put("object", "chat.completion.chunk");
+            root.put("created", created);
+            root.put("model", model);
+            ObjectNode choice = root.putArray("choices").addObject();
+            choice.put("index", 0);
+            choice.set("delta", delta);
+            if (finishReason == null) choice.putNull("finish_reason");
+            else choice.put("finish_reason", finishReason);
+            return om.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new IllegalStateException("failed to build chunk", e);
+        }
+    }
+
+    /** usage 帧：choices 为空数组，OpenAI规范 */
+    private String usageChunk(String id, String model, long created, int promptTokens, int completionTokens) {
+        try {
+            ObjectNode root = om.createObjectNode();
+            root.put("id", id);
+            root.put("object", "chat.completion.chunk");
+            root.put("created", created);
+            root.put("model", model);
+            root.putArray("choices");       // 空数组
+            ObjectNode usage = root.putObject("usage");
+            usage.put("prompt_tokens", promptTokens);
+            usage.put("completion_tokens", completionTokens);
+            usage.put("total_tokens", promptTokens + completionTokens);
+            return om.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new IllegalStateException("failed to build usage chunk", e);
+        }
+    }
+
+    /** 错误帧 */
+    private String errorChunk(String id, String model, long created, String message) {
+        try {
+            ObjectNode root = om.createObjectNode();
+            ObjectNode err = root.putObject("error");
+            err.put("message", message == null ? "unknow error" : message);
+            err.put("type", "server_error");
+            root.put("id", id);
+            root.put("model", model);
+            root.put("created", created);
+            return om.writeValueAsString(root);
+        } catch (Exception e) {
+            return "{\"error\":{\"message\":\"serialization failed\"}}";
         }
     }
 }
