@@ -9,36 +9,27 @@ llm:
   sse-timeout: 300000  # 5分钟，毫秒
   agnes:
     api-key: ${AGNES_API_KEY}
-    base-url: https://apihub.agnes-ai.com/v1/chat/completions
+    base-url: ${AGNES_BASE_URL}
   nvidia:
     api-key: ${NVIDIA_API_KEY}
-    base-url: https://integrate.api.nvidia.com/v1/chat/completions
+    base-url: ${NVIDIA_BASE_URL}
   openrouter:
     api-key: ${OPENROUTER_API_KEY}
-    base-url: https://openrouter.ai/api/v1/chat/completions
+    base-url: ${OPENROUTER_BASE_URL}
   models:
-    - model: openrouter/owl-alpha
+    - model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
       provider: openrouter
       status: active
-    - model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
-      provider: openrouter
-      status: active
-    - model: nvidia/deepseek-ai/deepseek-v4-flash
+    - model: nvidia/deepseek-ai/deepseek-v4.1-flash
       provider: nvidia
       status: active
-    - model: nvidia/deepseek-ai/deepseek-v4-pro
+    - model: nvidia/stepfun-ai/step-5-preview
       provider: nvidia
       status: active
-    - model: nvidia/moonshot-ai/kimi-k2.6
+    - model: nvidia/z-ai/glm-5.3-flash
       provider: nvidia
       status: active
-    - model: agnes/agnes-2.0-flash
-      provider: agnes
-      status: active
-    - model: agnes/agnes-image-2.1-flash
-      provider: agnes
-      status: active
-    - model: agnes/agnes-video-v2.0
+    - model: agnes/agnes-3.0-flash
       provider: agnes
       status: active
 
