@@ -15,7 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * POST /api/chat - 统一入口
+ * POST /api/chat - 统一入口（OpenAI 兼容接口）
  */
 @RestController
 @RequestMapping("/api/chat")

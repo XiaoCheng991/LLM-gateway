@@ -1,12 +1,12 @@
 package com.kyon.llmgateway.controller;
 
-import com.kyon.llmgateway.agent.Agent;
 import com.kyon.llmgateway.agent.AgentRequest;
 import com.kyon.llmgateway.agent.AgentResponse;
 import com.kyon.llmgateway.agent.StreamEvent;
 import com.kyon.llmgateway.agent.engine.ContextManager;
 import com.kyon.llmgateway.agent.engine.TokenCounter;
 import com.kyon.llmgateway.agent.impl.ReActAgent;
+import com.kyon.llmgateway.agent.impl.SimpleAgent;
 import com.kyon.llmgateway.agent.session.SessionManager;
 import com.kyon.llmgateway.model.ApiResult;
 import com.kyon.llmgateway.model.Message;
@@ -29,6 +29,9 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Agent 原生接口
+ */
 @Controller
 @RequestMapping("/api/agent")
 public class AgentController {
@@ -37,7 +40,7 @@ public class AgentController {
     @Resource
     private ReActAgent reActAgent;
     @Resource
-    private Agent simpleAgent;
+    private SimpleAgent simpleAgent;
     @Resource
     private SessionManager sessionManager;
     @Resource
