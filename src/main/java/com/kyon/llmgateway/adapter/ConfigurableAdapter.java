@@ -1,34 +1,24 @@
 package com.kyon.llmgateway.adapter;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
+public class ConfigurableAdapter extends BaseLLMAdapter {
+    private final String provider;
+    private final String baseUrl;
+    private final String apiKey;
 
-/**
- * 调用 Nvidia 模型
- */
-@Service
-public class NvidiaAdapter extends BaseLLMAdapter {
-
-    @Value("${llm.nvidia.base-url}")
-    private String BASE_URL;
-
-    @Value("${llm.nvidia.api-key}")
-    private String API_KEY;
-
-    @Override
-    protected String getBaseUrl() {
-        return BASE_URL;
+    public ConfigurableAdapter(String provider, String baseUrl, String apiKey) {
+        this.provider = provider;
+        this.baseUrl = baseUrl;
+        this.apiKey = apiKey;
     }
 
     @Override
-    protected String getApiKey() {
-        return API_KEY;
-    }
+    public String getProviderName() { return provider; }
 
     @Override
-    public String getProviderName() {
-        return "nvidia";
-    }
+    protected String getBaseUrl() { return baseUrl; }
+
+    @Override
+    protected String getApiKey() { return apiKey; }
 
     @Override
     public String getEffectiveModel() {
@@ -44,7 +34,7 @@ public class NvidiaAdapter extends BaseLLMAdapter {
             return model;
         }
         String prefix = model.substring(0, slashIdx).toLowerCase();
-        if ("nvidia".equals(prefix)) {
+        if (provider.equals(prefix)) {
             return model.substring(slashIdx + 1);
         }
         return model;
