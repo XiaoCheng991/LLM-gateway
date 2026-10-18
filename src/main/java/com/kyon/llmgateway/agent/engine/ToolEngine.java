@@ -53,10 +53,6 @@ public class ToolEngine {
             try {
                 // 1.从注册表拿工具
                 Tool tool = toolRegistry.getTool(name);
-                if (tool == null) {
-                    throw new RuntimeException("工具未找到: " + name);
-                }
-
                 // 2. 解析参数
                 JsonNode args = om.readTree(argStr);
                 // 3. 执行工具
