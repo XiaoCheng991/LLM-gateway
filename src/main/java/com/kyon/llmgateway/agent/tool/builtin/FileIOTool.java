@@ -4,6 +4,7 @@ import com.kyon.llmgateway.agent.tool.Tool;
 import com.kyon.llmgateway.agent.tool.ToolDef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -23,7 +24,9 @@ public class FileIOTool implements Tool {
 
     private static final Logger log = LoggerFactory.getLogger(FileIOTool.class);
     private static final ObjectMapper om = new ObjectMapper();
-    private static final String WORKSPACE_DIR = "data/workspace";
+
+    @Value("${app.workspace-dir:./data/workspace}")
+    private String WORKSPACE_DIR;
 
     @Override
     public String getName() {
@@ -55,7 +58,8 @@ public class FileIOTool implements Tool {
         content.put("type", "string");
         content.put("description", "文件内容（仅在 action 为 \"write\" 时需要）");
 
-        params.putArray("required").add("action").add("path").add("content");
+        // content 仅在 write 时需要
+        params.putArray("required").add("action").add("path");
         return params;
     }
 
