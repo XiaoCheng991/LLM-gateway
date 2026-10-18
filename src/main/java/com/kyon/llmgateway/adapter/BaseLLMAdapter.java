@@ -90,7 +90,7 @@ public abstract class BaseLLMAdapter implements LLMService {
         String modelName = getEffectiveModel();
         log.debug("Chat request - model: {}, messages: {}", modelName, userMsgList.size());
 
-        // 0. 非消耗性预检：看通里“现在”够不够，但不扣token
+        // 0. 非消耗性预检：看桶里“现在”够不够，但不扣token
         if (!tokenBucketRateLimiter.tryAcquireNonDestructive(getProviderName())) {
             throw new RateLimitExceededException(
                     getProviderName(),
@@ -184,7 +184,7 @@ public abstract class BaseLLMAdapter implements LLMService {
      */
     @Override
     public SseEmitter stream(List<Message> userMsgList, List<ToolDefinition> tools) {
-        String modelName = currentModel;
+        String modelName = getEffectiveModel();
         log.debug("Stream request - model: {}, messages: {}", modelName, userMsgList.size());
 
         // 1. 创建 SseEmitter，设置 5 分钟超时
@@ -192,7 +192,7 @@ public abstract class BaseLLMAdapter implements LLMService {
 
         // 客户端断开/超时/出错 -> 置位，读取循环据此提前退出并关闭上游连接
         AtomicBoolean cancelled = new AtomicBoolean(false);
-        emitter.onCompletion(() -> cancelled.set(true));
+        emitter.onCompletion(() -> cancelled.set(true));  // 三回调 -> 置位
         emitter.onTimeout(() -> cancelled.set(true));
         emitter.onError((e) -> cancelled.set(true));
 
@@ -208,7 +208,7 @@ public abstract class BaseLLMAdapter implements LLMService {
             try {
                 // 2.1. 发起 HTTP POST 请求，请求体里加 "stream": true
                 String toolChoice = (tools == null || tools.isEmpty()) ? null : "auto";
-                ChatRequest req = new ChatRequest(modelName, userMsgList, true, null, toolChoice);
+                ChatRequest req = new ChatRequest(modelName, userMsgList, true, tools, toolChoice);
                 String json = om.writeValueAsString(req);
 
                 // 2.2 设置请求头 Accept：text/event-stream
@@ -368,11 +368,11 @@ public abstract class BaseLLMAdapter implements LLMService {
             String finishReason = "";
 
             String line;
-            while ((line = br.readLine()) != null) {
-                if (!line.startsWith("data: ")) continue;
+            while ((line = br.readLine()) != null) {        // readLine 没数据就阻塞等待
+                if (!line.startsWith("data: ")) continue;   // 跳过注释/空行
 
                 String data = line.substring(6);
-                if ("[DONE]".equals(data)) break;
+                if ("[DONE]".equals(data)) break;           // 上游说结束
 
                 try {
                     JsonNode root = om.readTree(data);
