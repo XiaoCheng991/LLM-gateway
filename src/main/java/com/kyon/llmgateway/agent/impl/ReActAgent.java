@@ -26,8 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Component
 public class ReActAgent implements Agent {
@@ -40,8 +38,9 @@ public class ReActAgent implements Agent {
     private static final int MAX_THOUGHT_LENGTH = 2000;
     private static final double WARN_THRESHOLD = 0.85;
 
-    // 匹配 <thinking>...</thinking> 标签 (D-01)
-    private static final Pattern THOUGHT_PATTERN = Pattern.compile("<thinking>([\\s\\S]*?)</thinking>", Pattern.DOTALL);
+    // thinking 标签常量
+    private static final String OPEN_TAG = "<thinking>";
+    private static final String CLOSE_TAG = "</thinking>";
 
     // 每个 session 独立状态（ConcurrentHashMap 保证线程安全）
     private final ConcurrentHashMap<String, AgentState> sessionStates = new ConcurrentHashMap<>();
@@ -57,17 +56,16 @@ public class ReActAgent implements Agent {
     @Resource
     private ContextManager contextManager;
 
-
     // ============== Agent 接口实现 =================
     @Override
     public AgentResponse chat(AgentRequest request) throws Exception {
-        // 同步模式：走流式 LLM 调用，直接返回最终结果
+        // 1. 确保 sessionId 存在
         if (request.getSessionId() == null || request.getSessionId().isBlank()) {
             request.setSessionId(sessionManager.newSessionId());
         }
         String sessionId = request.getSessionId();
 
-        // 追加用户消息
+        // 2. 追加用户消息
         sessionManager.append(sessionId, new Message("user", request.getMessage(), null, null, null));
 
         // 上下文压缩
@@ -103,6 +101,7 @@ public class ReActAgent implements Agent {
             LLMService service = llmServiceFactory.getLlmService(request.getModel());
             ChatResponse response = service.chat(messages, tools);
 
+            // 出口
             if (response == null || !response.hasToolCalls()) {
                 finalContent = (response != null && response.getContent() != null)
                         ? response.getContent()
@@ -119,16 +118,19 @@ public class ReActAgent implements Agent {
             // 执行工具
             List<ToolResult> results = toolEngine.execute(response.getToolCalls());
             for (ToolResult r : results) {
+
+                // 纵深防御，包装 + ] 转义
                 String wrapped = "[TOOL_RESULT: name=" + r.getToolName() + " content=" +
                         r.getContent().replace("]", "\\]") + "]";
                 Message toolMsg = new Message("tool", wrapped, null, r.getToolCallId(), r.getToolName());
                 messages.add(toolMsg);
 
+                // 双大括号初始化
                 toolHistory.add(new ToolCallRecord(
-                        new ToolCall() {{
-                            setId(r.getToolCallId());
-                            setName(r.getToolName());
-                        }}, r.getContent()));
+                        new ToolCall() {{ setId(r.getToolCallId()); setName(r.getToolName()); }},
+                        r.getContent()
+                        )
+                );
             }
 
             transitionToSilent(sessionId, AgentState.THINKING);
@@ -291,21 +293,17 @@ public class ReActAgent implements Agent {
 
             // 调 LLM (流式, delta 回调处理思考内容提取
             StringBuilder thoughtBuffer = new StringBuilder();
-            StringBuilder contentBuffer = new StringBuilder();
             boolean[] inThought = {false};
 
             LLMService service = llmServiceFactory.getLlmService(request.getModel());
             ChatResponse response = service.chatStreaming(
                     messages, tools,
-                    delta -> extractThoughtAndStream(delta, thoughtBuffer, contentBuffer, inThought, emitter)
+                    delta -> extractThoughtAndStream(delta, thoughtBuffer, inThought, emitter)
             );
             fullResponse = response != null ? response.getContent() : "";
 
             if (response == null || !response.hasToolCalls()) {
-                // 无工具调用 -> 最终回答
-                if (!contentBuffer.isEmpty()) {
-                    emitter.accept(StreamEvent.content(contentBuffer.toString()));
-                }
+                // 缓冲里剩下的只有不完整的标签碎片，不该推
                 break;
             }
 
@@ -381,6 +379,7 @@ public class ReActAgent implements Agent {
         if (planJson == null || planJson.isBlank()) {
             log.warn("计划生成失败, 回退到 REACT 模式");
             executeReactMode(messages, request, emitter);
+            return;
         }
 
         // 2. 推计划给前端
@@ -425,49 +424,87 @@ public class ReActAgent implements Agent {
         emitter.accept(StreamEvent.done());
     }
 
-    private static final ThreadLocal<Matcher> TL_MATCHER = ThreadLocal.withInitial(() -> THOUGHT_PATTERN.matcher(""));
-
     // ============== 辅助方法 ================
     /**
      * 思考内容提取（D-01/D-02）
-     * 从流式 delta 中识别 <thinking>...</thinking>, 分别推送 THINKING 和 CONTENT 事件
+     * <p>
+     * 单通道设计：所有输出都从 thoughtBuffer 切出，推送即删除；
+     * 缓冲区不可能包含"已推送过的内容"，因此重复推送在结构上不会发生。
      */
-    private void extractThoughtAndStream(String delta, StringBuilder thoughtBuffer, StringBuilder contentBuffer,
+    private void extractThoughtAndStream(String delta, StringBuilder thoughtBuffer,
                                          boolean[] inThought, Consumer<StreamEvent> emitter) {
 
-        // 简单实现： 累积到 thoughBuffer, 用正则匹配
+        // 累积缓冲到 thoughBuffer, 用正则匹配
         thoughtBuffer.append(delta);
-        String text = thoughtBuffer.toString();
 
-        Matcher matcher = TL_MATCHER.get().reset(text);
-        if (matcher.find()) {
-            String thought = matcher.group(1).trim();
-            // 截断超长思考（Pitfall 3）
-            if (thought.length() > MAX_THOUGHT_LENGTH) {
-                thought = thought.substring(0, MAX_THOUGHT_LENGTH) + "...[truncated]";
-            }
-            emitter.accept(StreamEvent.thinking(thought));
-            // 清空已处理部分
-            thoughtBuffer.delete(0, matcher.end());
-            inThought[0] = false;
-        }
+        while (true) {
+            // 思考态：现在在思考标签内部
+            if (inThought[0]) {
+                int end = thoughtBuffer.indexOf(CLOSE_TAG);
+                if (end < 0) break;  // 思考还没写完，等下一帧过来
 
-        // 非思考内容推为 content
-        if (!inThought[0] && contentBuffer != null) {
-            // 检查是否有 <thinking> 开始标签
-            int thinkStart = text.indexOf("<thinking>");
-            if (thinkStart >= 0) {
-                // 标签前的内容推为 conten
-                if (thinkStart > 0) {
-                    emitter.accept(StreamEvent.content(text.substring(0, thinkStart)));
+                String thought = thoughtBuffer.substring(0, end).trim();
+                // 截断超长思考
+                if (thought.length() > MAX_THOUGHT_LENGTH) {
+                    thought = thought.substring(0, MAX_THOUGHT_LENGTH) + "...[truncated]";
                 }
-                inThought[0] = true;
-                thoughtBuffer.delete(0, thoughtBuffer.length());
-                thoughtBuffer.append(text.substring(thinkStart));
+                emitter.accept(StreamEvent.thinking(thought));
+                // 清空已处理部分
+                thoughtBuffer.delete(0, end + CLOSE_TAG.length());
+                inThought[0] = false;
+                // 继续循环：闭合标签后面可能紧跟下一个标签或者正文
             } else {
-                emitter.accept(StreamEvent.content(delta));
+                // 非思考态：标记不在思考标签内部, 找开始标签
+                int start = thoughtBuffer.indexOf(OPEN_TAG);
+                int stray = thoughtBuffer.indexOf(CLOSE_TAG);
+
+                // 1. start 标签存在，end 标签不存在或者在 start 标签前面
+                if (start >= 0 && (stray < 0 || start < stray)) {
+                    // 标签前的正文推为content（推过即删，不重复）
+                    if (start > 0) {
+                        emitter.accept(StreamEvent.content(thoughtBuffer.substring(0, start)));
+                        thoughtBuffer.delete(0, start);
+                    }
+                    thoughtBuffer.delete(0, OPEN_TAG.length()); // 删除开始标签
+                    inThought[0] = true;
+                }
+                // 2. end 标签存在，不管 start 标签在哪
+                else if (stray >= 0) {
+                    // 游离的 end 标签（没有配对）：跳过，前面的正文照推
+                    if (stray > 0) {
+                        emitter.accept(StreamEvent.content(thoughtBuffer.substring(0, stray)));
+                    }
+                    thoughtBuffer.delete(0, stray + CLOSE_TAG.length()); // 删除闭合标签
+                }
+                // 3. 没有任何标签：正文直接推，但扣住尾部“疑似被拆分的标签前缀”
+                else {
+                    int safeEnd = safeContentEnd(thoughtBuffer);
+                    if (safeEnd > 0) {
+                        emitter.accept(StreamEvent.content(thoughtBuffer.substring(0, safeEnd)));
+                        thoughtBuffer.delete(0, safeEnd);
+                    }
+                    return;
+                }
             }
         }
+    }
+
+    /**
+     * 计算缓冲区可安全推送为正文的长度
+     * 模型的标签可能被拆成两帧到达（这帧是 "<thin", 下帧是 "king>"）
+     * 尾部如果是标签的前缀片段，必须留在缓冲区等下一帧拼完整，否则标签永远识别不出来
+     */
+    private int safeContentEnd(StringBuilder buf) {
+        // 缓冲区只有残缺标签就取标签，如果大于标签长度就说明还有正文，为识别取标签长度-1
+        int maxCut = Math.min(buf.length(), CLOSE_TAG.length() - 1);  // 也可以覆盖 start 标签的情况
+        for (int k = maxCut; k > 0; k--) {
+            // 倒着切，能保证对于"<th"和"<thinki" 先保留长的
+            String tail = buf.substring(buf.length() - k);
+            if (OPEN_TAG.startsWith(tail) || CLOSE_TAG.startsWith(tail)) {
+                return buf.length() - k;
+            }
+        }
+        return buf.length();
     }
 
     /**
