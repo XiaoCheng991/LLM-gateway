@@ -2,6 +2,9 @@ package com.kyon.llmgateway.agent.tool.builtin;
 
 import com.kyon.llmgateway.agent.tool.Tool;
 import com.kyon.llmgateway.agent.tool.ToolDef;
+import jakarta.annotation.PostConstruct;
+import lombok.Getter;
+import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,8 +28,30 @@ public class FileIOTool implements Tool {
     private static final Logger log = LoggerFactory.getLogger(FileIOTool.class);
     private static final ObjectMapper om = new ObjectMapper();
 
-    @Value("${app.workspace-dir:./data/workspace}")
-    private String WORKSPACE_DIR;
+    @Value("${agent.workspace-dir}")
+    private String workspaceDir;
+
+    @Getter
+    @Setter
+    private Path basePath;      // 词法root：配置字符串解析成的绝对路径，只用来做字符串级别对比
+
+    @Setter
+    @Getter
+    private Path realBasePath;  // 物理root：basePath跟随所有路牌后的真实位置，用于最终核对
+
+    @PostConstruct
+    void init() {
+        Path base = Paths.get(workspaceDir).toAbsolutePath().normalize();
+        try {
+            Files.createDirectories(base);          // fail-fast：建不出来 -> 项目启动就报错
+            realBasePath = basePath.toRealPath();   // 把路径上的路牌一路解到底，得到真实位置
+        } catch (IOException e) {
+            throw new IllegalStateException("workspace 目录不可用：" + base, e);
+        }
+
+        basePath = base;
+        log.info("FileIO workspace = {}", base);
+    }
 
     @Override
     public String getName() {
@@ -35,7 +60,7 @@ public class FileIOTool implements Tool {
 
     @Override
     public String getDescription() {
-        return "读取或写入本地文件，安全目录为 " + WORKSPACE_DIR + " 下";
+        return "读取或写入本地文件，安全目录为 " + workspaceDir + " 下";
     }
 
     @Override
@@ -52,7 +77,7 @@ public class FileIOTool implements Tool {
 
         ObjectNode path = properties.putObject("path");
         path.put("type", "string");
-        path.put("description", "文件名（仅文件名，不包含目录路径，如在 " + WORKSPACE_DIR + "目录下)");
+        path.put("description", "文件名（仅文件名，不包含目录路径，如在 " + workspaceDir + "目录下)");
 
         ObjectNode content = properties.putObject("content");
         content.put("type", "string");
@@ -64,24 +89,34 @@ public class FileIOTool implements Tool {
     }
 
     @Override
-    public String execute(JsonNode arguments) {
+    public String execute(JsonNode arguments) throws IOException {
         String action = arguments.path("action").asString();
         String fileName = arguments.path("path").asString();
 
-        // 安全检查：防止路径穿越
+        // 第1层安全检查：文件名 字符黑名单（挡住 / \ .. 保证文件名字只有一层）
         if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
             return "错误：文件名包含非法字符，仅支持纯文件名";
         }
 
-        Path basePath = Paths.get(WORKSPACE_DIR).toAbsolutePath().normalize();
         Path targetPath = basePath.resolve(fileName).normalize();
 
-        // 确认目标路径在安全目录 data/workspace/ 目录下操作
+        // 第2层：字符串级检查 -- 确认目标路径在安全目录 data/workspace/ 目录下操作
         if (!targetPath.startsWith(basePath.toString())) {
-            return "错误：访问路径超出安全目录 " + WORKSPACE_DIR;
+            return "错误：访问路径超出安全目录 " + workspaceDir;
         }
 
         try {
+            // 第3层：真实磁盘检查
+            // 3a. 目标文件本身是路牌吗，workspace用不到路牌，见到就拒
+            if (Files.isSymbolicLink(targetPath)) return "错误: 目标文件是符号连接，已拒绝";
+
+            // 3b. 父目录的真实位置还在沙箱里吗
+            //     目前文件名只有一层 -> 父目录恒为 base -> 这行恒通过
+            //     将来开放子目录(notes/a.txt) 时自动生效
+            if (!targetPath.getParent().toRealPath().startsWith(realBasePath)) {
+                return "错误: 真实路径超出安全目录";
+            }
+
             if ("read".equals(action)) {
                 // 检查文件是否存在
                 if (!Files.exists(targetPath)) {
@@ -94,7 +129,7 @@ public class FileIOTool implements Tool {
             } else if ("write".equals(action)) {
                 String content = arguments.path("content").asString("");
 
-                // 写入时自动创建子目录
+                // 父级目录不存在则创建(当前父目录恒为 base, 在init中已经创建,这是为将来子目录留的)
                 Files.createDirectories(targetPath.getParent());
 
                 // 写入文件
@@ -109,4 +144,5 @@ public class FileIOTool implements Tool {
             return "错误：文件操作失败 - " + e.getMessage();
         }
     }
+
 }
