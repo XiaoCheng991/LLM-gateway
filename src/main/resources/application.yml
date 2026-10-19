@@ -9,13 +9,13 @@ llm:
   sse-timeout: 300000  # 5分钟，毫秒
   agnes:
     api-key: ${AGNES_API_KEY}
-    base-url: ${AGNES_BASE_URL}
+    base-url: https://api.agnes-ai.cn/v1/chat/completions
   nvidia:
     api-key: ${NVIDIA_API_KEY}
-    base-url: ${NVIDIA_BASE_URL}
+    base-url: https://integrate.api.nvidia.com/v1/chat/completions
   openrouter:
     api-key: ${OPENROUTER_API_KEY}
-    base-url: ${OPENROUTER_BASE_URL}
+    base-url: OPENROUTER_BASE_URL=https://openrouter.ai/api/v1/chat/completions
   models:
     - model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
       provider: openrouter
@@ -37,6 +37,7 @@ llm:
 agent:
   db:
     url: jdbc:sqlite:data/agent.db
+  workspace-dir: ${WORKSPACE_DIR:data/workspace}
   rate-limit:
     openrouter:
       requests-per-minute: 100
