@@ -19,7 +19,7 @@ public class TokenCounter {
         // 统计中英文个数
         for (char c: text.toCharArray()) {
             // 每个中文字符算 1.5 个 token，英文字符算 0.25 个 token
-            if (c >= 0x4e00 && c < 0x9fff) {
+            if (c >= 0x4e00 && c <= 0x9fff) {
                 chineseChars++;
             } else {
                 otherChars++;

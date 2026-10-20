@@ -45,8 +45,10 @@ public class ToolEngine {
             }
 
             String name = functionNode.path("name").asString("");
-            String argStr = functionNode.path("arguments").isNull() ?
-                    "{}" : functionNode.path("arguments").toString();
+            JsonNode argsNode = functionNode.path("arguments");
+            String argStr = (argsNode.isNull() || argsNode.isMissingNode()) ? "{}"
+                    : argsNode.isTextual() ? argsNode.asString("{}")
+                    : argsNode.toString();
 
             log.info("Executing tool: {}, callId: {}, args: {}", name, callId, argStr);
 
