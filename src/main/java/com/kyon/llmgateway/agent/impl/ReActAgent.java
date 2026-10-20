@@ -282,7 +282,7 @@ public class ReActAgent implements Agent {
         transitionTo(sessionId, AgentState.THINKING, emitter);
 
         List<ToolDefinition> tools = buildToolDefinitions();
-        String fullResponse;
+        String fullResponse = "";
 
         int initialSize = messages.size();
         int iterations = 0;
@@ -348,6 +348,11 @@ public class ReActAgent implements Agent {
         // 将ReAct 循环中新增的消息持久化到 session
         for (int i = initialSize; i < messages.size(); i++) {
             sessionManager.append(sessionId, messages.get(i));
+        }
+        
+        // 最终回答落盘
+        if (fullResponse != null && !fullResponse.isBlank()) {
+            sessionManager.append(sessionId, new Message("assistant", fullResponse, null, null, null));
         }
 
         // DONE
