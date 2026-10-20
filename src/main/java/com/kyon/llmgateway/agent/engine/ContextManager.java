@@ -56,24 +56,28 @@ public class ContextManager {
     /**
      * 自动检测：token 超过 context window 70% 时出发摘要压缩
      */
-    public List<Message> truncateToThreshold(List<Message> messages, LLMServiceFactory factory) throws Exception {
+    public List<Message> truncateToThreshold(List<Message> messages, String model, LLMServiceFactory factory) {
         int threshold = (int) (DEFAULT_CONTEXT_WINDOW * SUMMARIZE_THRESHOLD);
         if (TokenCounter.estimateMessages(messages) <= threshold) {
             return messages;
         }
         // 超出阈值，触发摘要（factory 为 null 时，由调用方保证传入）
-        return summarize(messages, DEFAULT_CONTEXT_WINDOW, factory);
+        return summarize(messages, model, factory);
     }
 
     /**
      * 讲历史消息压缩为摘要，保留最近 1/3（最少 5 条）
      * @param messages 完整消息列表
-     * @param contextWindowTokens context window 大小（预留参数，当前用默认值）
      * @param factory   LLMServiceFactory，用于获取 LLM 做摘要
      */
-    public List<Message> summarize(List<Message> messages, int contextWindowTokens, LLMServiceFactory factory) throws Exception {
+    public List<Message> summarize(List<Message> messages, String model, LLMServiceFactory factory) {
         if (messages == null || messages.isEmpty() || factory == null) {
             return messages;
+        }
+        // 没有模型 -> 退回截断
+        if (model == null || model.isBlank()) {
+            log.warn("摘要未指定模型，退回截断");
+            return truncateByTokens(messages);
         }
 
         // 保留最近 1/3（最少 5 条）
@@ -83,7 +87,6 @@ public class ContextManager {
         }
 
         List<Message> toSummarize = messages.subList(0, messages.size() - keepCount);
-
         // 保留 keepCount 长度的消息
         List<Message> toKeep = new ArrayList<>(messages.subList(messages.size() - keepCount, messages.size()));
 
@@ -100,23 +103,32 @@ public class ContextManager {
                 new Message("user", sb.toString(), null, null, null)
         );
 
-        // 调 LLM 生成摘要
-        LLMService service = factory.getLlmService(null);
-        if (service == null) {
-            log.warn("LLMService 获取失败, 跳过摘要压缩");
-            return messages;
+        try {
+            // 调 LLM 生成摘要
+            LLMService service = factory.getLlmService(model);
+            if (service == null) {
+                log.warn("LLMService 获取失败, 跳过摘要压缩");
+                return messages;
+            }
+            ChatResponse response = service.chat(summaryInput, null);
+            if (response == null || response.getContent() == null || response.getContent().isBlank()) {
+                log.warn("LLMService 摘要生成失败, 跳过摘要压缩");
+                return messages;
+            }
+
+            // 构造摘要消息
+            Message summaryMsg = new Message("system",
+                    "[Previous conversation summary: " + response.getContent() + "]", null, null, null);
+
+            // 摘要 + 保留的消息
+            List<Message> result = new ArrayList<>();
+            result.add(summaryMsg);
+            result.addAll(toKeep);
+            return result;
+        } catch (Exception e) {
+            log.error("摘要生成异常, 退回截断：{}", e.getMessage());
+            return truncateByTokens(messages);
         }
-        ChatResponse response = service.chat(summaryInput, null);
-        String summaryContent = response.getContent();
-
-        // 构造摘要消息
-        Message summaryMsg = new Message("system", "[Previous conversation summary: " + summaryContent + "]", null, null, null);
-
-        // 摘要 + 保留的消息
-        List<Message> result = new ArrayList<>();
-        result.add(summaryMsg);
-        result.addAll(toKeep);
-        return result;
     }
 
 }

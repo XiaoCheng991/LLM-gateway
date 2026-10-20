@@ -110,7 +110,7 @@ public class AgentController {
         List<Message> messages = new ArrayList<>(history);
 
         int originalTokens = TokenCounter.estimateMessages(messages);
-        messages = contextManager.summarize(messages, 32000, llmServiceFactory);
+        messages = contextManager.summarize(messages, request.getModel(), llmServiceFactory);
         int compressedTokens = TokenCounter.estimateMessages(messages);
 
         // 用压缩后的消息替换会话历史
@@ -169,5 +169,6 @@ public class AgentController {
     public static class CompactRequest {
         private String sessionId;
         private String secret;
+        private String model;
     }
 }
