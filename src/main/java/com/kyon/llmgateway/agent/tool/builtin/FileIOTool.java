@@ -44,7 +44,7 @@ public class FileIOTool implements Tool {
         Path base = Paths.get(workspaceDir).toAbsolutePath().normalize();
         try {
             Files.createDirectories(base);          // fail-fast：建不出来 -> 项目启动就报错
-            realBasePath = basePath.toRealPath();   // 把路径上的路牌一路解到底，得到真实位置
+            realBasePath = base.toRealPath();   // 把路径上的路牌一路解到底，得到真实位置
         } catch (IOException e) {
             throw new IllegalStateException("workspace 目录不可用：" + base, e);
         }

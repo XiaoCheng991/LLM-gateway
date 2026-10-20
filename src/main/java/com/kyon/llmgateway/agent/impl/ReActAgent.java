@@ -70,7 +70,7 @@ public class ReActAgent implements Agent {
 
         // 上下文压缩
         List<Message> messages = sessionManager.getHistory(sessionId);
-        messages = contextManager.truncateToThreshold(messages, llmServiceFactory);
+        messages = contextManager.truncateToThreshold(messages, request.getModel(), llmServiceFactory);
 
         // 同步 ReAct 循环
         AgentResponse response;
@@ -266,7 +266,7 @@ public class ReActAgent implements Agent {
 
         // 3. 获取历史 + 上下文压缩 (D-13/D-15: 在ReAct 循环前)
         List<Message> messages = sessionManager.getHistory(sessionId);
-        messages = contextManager.truncateToThreshold(messages, llmServiceFactory);
+        messages = contextManager.truncateToThreshold(messages, request.getModel(), llmServiceFactory);
 
         // 4. 分支：REACT or PLAN_EXECUTE
         if (request.getMode() == AgentMode.PLAN_EXECUTE) {
@@ -434,7 +434,7 @@ public class ReActAgent implements Agent {
     private void extractThoughtAndStream(String delta, StringBuilder thoughtBuffer,
                                          boolean[] inThought, Consumer<StreamEvent> emitter) {
 
-        // 累积缓冲到 thoughBuffer, 用正则匹配
+        // 累积缓冲到 thoughBuffer, 交给下面的状态机消化
         thoughtBuffer.append(delta);
 
         while (true) {
