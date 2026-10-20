@@ -1,6 +1,8 @@
 package com.kyon.llmgateway.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,9 +20,11 @@ public class Message {
     private String content;
 
     // assistant 消息带带 tool_calls
+    @JsonProperty("tool_calls")
     private JsonNode toolCalls;
 
     // tool 消息需要的 id
+    @JsonProperty("tool_call_id")
     private String toolCallId;
 
     // tool 消息需要的工具名

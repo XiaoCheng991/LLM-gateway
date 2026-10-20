@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedReader;
@@ -357,6 +358,12 @@ public abstract class BaseLLMAdapter implements LLMService {
 
         HttpResponse<InputStream> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
 
+        // 上游 4xx/5xx 回的是 JSON 错误体而非 SSE
+        if (response.statusCode() >= 400) {
+            String errBody = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
+            throw new RuntimeException("上游 HTTP %d".formatted(response.statusCode(), errBody));
+        }
+
         // 3. 逐行读，累计 content
         try (BufferedReader br = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
             StringBuilder fullContent = new StringBuilder();
@@ -407,8 +414,9 @@ public abstract class BaseLLMAdapter implements LLMService {
                             if (tc.has("function") && tc.path("function").has("name")) {
                                 toolCallNames.put(index, tc.path("function").path("name").asString());
                             }
+                            // 文本碎片必须取“原文”(asString), toString()会再包一层引号+转义, {"e -> {\"e
                             if (tc.has("function") && tc.path("function").has("arguments")) {
-                                String args = tc.path("function").path("arguments").toString();
+                                String args = tc.path("function").path("arguments").asString();
                                 toolCallArgs.computeIfAbsent(index, k -> new StringBuilder()).append(args);
                             }
                         }
@@ -426,22 +434,32 @@ public abstract class BaseLLMAdapter implements LLMService {
             }
             long latency = System.currentTimeMillis() - start;
 
-            // 组装 tool_calls JSON
+            // 组装 tool_calls (结构化构建，不再用字符串模版拼 JSON--拼接对内容零容忍)
             JsonNode toolCallsNode = null;
             if (!toolCallIds.isEmpty()) {
-                List<JsonNode> toolCalls = new ArrayList<>();
+                ArrayNode toolCalls = om.createArrayNode();
                 for (int i = 0; i < toolCallIds.size(); i++) {
                     String id = toolCallIds.get(i);
                     String name = toolCallNames.get(i);
                     String args = toolCallArgs.getOrDefault(i, new StringBuilder()).toString();
 
                     // 组装成 OpenAI tool_calls 格式
-                    JsonNode tcJson = om.readTree("""
-                        {"id":"%s","type":"function","function":{"name":"%s","arguments":%s}}
-                        """.formatted(id, name, args.isEmpty() ? "{}" : args));
+                    ObjectNode tcJson = om.createObjectNode();
+                    tcJson.put("id", id);
+                    tcJson.put("type", "function");
+                    ObjectNode fn = tcJson.putObject("function");
+                    fn.put("name", name);
+                    try {
+                        om.readTree(args.isEmpty() ? "{}" : args); // 先尝试解析，确保是合法 JSON
+                        fn.put("arguments", args.isEmpty() ? "{}" : args);
+                    } catch (Exception e) {
+                        // 模型给的参数本身不是合法 JSON：组装不炸，降级为空参数
+                        log.warn("tool_call arguments 非法 JSON，降级为空参数, name: {}, args: {}", name, args, e);
+                        fn.put("arguments", "{}");  // 降级为空对象
+                    }
                     toolCalls.add(tcJson);
                 }
-                toolCallsNode = om.readTree(om.writeValueAsString(toolCalls));
+                toolCallsNode = toolCalls;
             }
 
             // token 估算（流式响应没有 usage，用message和token估算）
