@@ -15,7 +15,7 @@ llm:
     base-url: https://integrate.api.nvidia.com/v1/chat/completions
   openrouter:
     api-key: ${OPENROUTER_API_KEY}
-    base-url: OPENROUTER_BASE_URL=https://openrouter.ai/api/v1/chat/completions
+    base-url: https://openrouter.ai/api/v1/chat/completions
   models:
     - model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
       provider: openrouter

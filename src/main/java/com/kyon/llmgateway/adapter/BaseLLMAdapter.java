@@ -116,11 +116,16 @@ public abstract class BaseLLMAdapter implements LLMService {
         HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
         long latency = System.currentTimeMillis() - start;
 
+        // 上游 HTTP 层错误（4xx/5xx）：错误体里没有 choices
+        if (response.statusCode() >= 400) {
+            throw new RuntimeException("上游 HTTP %d: %s".formatted(response.statusCode(), response.body()));
+        }
+
         // 4. 解析响应, 解析为ChatResponse
         JsonNode root = om.readTree(response.body());
 
         // 校验错误
-        if (root.has("error")) {
+        if (root.has("error") && !root.has("choices")) {
             throw new RuntimeException("API Error: " + root.path("error")
                     .path("message").asString("unknown error"));
         }
@@ -361,7 +366,7 @@ public abstract class BaseLLMAdapter implements LLMService {
         // 上游 4xx/5xx 回的是 JSON 错误体而非 SSE
         if (response.statusCode() >= 400) {
             String errBody = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
-            throw new RuntimeException("上游 HTTP %d".formatted(response.statusCode(), errBody));
+            throw new RuntimeException("上游 HTTP %d: %s".formatted(response.statusCode(), errBody));
         }
 
         // 3. 逐行读，累计 content
