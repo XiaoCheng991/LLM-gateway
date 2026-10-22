@@ -27,8 +27,4 @@ public class AgentRequest {
      * Agent 模式，默认 REACT
      */
     private AgentMode mode = AgentMode.REACT;
-
-    public AgentMode getMode() {
-        return mode != null ? mode : AgentMode.REACT;
-    }
 }
