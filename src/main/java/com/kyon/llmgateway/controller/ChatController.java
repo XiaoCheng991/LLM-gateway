@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 
@@ -51,8 +52,12 @@ public class ChatController {
 
         // 归一化：没有 tools 就不携带 tool_choice（否则上游 400）
         List<ToolDefinition> tools = request.getTools();
-        String toolChoice = (tools == null || tools.isEmpty()) ? null : request.getToolChoice();
+        JsonNode toolChoice = (tools == null || tools.isEmpty()) ? null : request.getToolChoice();
 
+        // 开启 stream 则使用 stream 的方法
+        if (Boolean.TRUE.equals(request.getStream())) {
+            return service.stream(request.getMessages(), tools, toolChoice);
+        }
         ChatResponse response = service.chat(request.getMessages(), tools, toolChoice);
         return ApiResult.success(response);
     }

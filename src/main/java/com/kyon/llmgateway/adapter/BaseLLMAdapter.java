@@ -79,7 +79,7 @@ public abstract class BaseLLMAdapter implements LLMService {
     @Override
     public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools) throws Exception {
         // 工具存在时默认 “auto”，否则不发 tool_choice 字段
-         String toolChoice = (tools == null || tools.isEmpty()) ? null : "auto";
+        JsonNode toolChoice = (tools == null || tools.isEmpty()) ? null : om.valueToTree("auto");
          return chat(userMsgList, tools, toolChoice);
     }
 
@@ -87,7 +87,7 @@ public abstract class BaseLLMAdapter implements LLMService {
      * 普通 Loop 调用请求
      */
     @Override
-    public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools, String toolChoice) throws Exception {
+    public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools, JsonNode toolChoice) throws Exception {
         String modelName = getEffectiveModel();
         log.debug("Chat request - model: {}, messages: {}", modelName, userMsgList.size());
 
@@ -190,6 +190,15 @@ public abstract class BaseLLMAdapter implements LLMService {
      */
     @Override
     public SseEmitter stream(List<Message> userMsgList, List<ToolDefinition> tools) {
+        return stream(userMsgList, tools, null);
+    }
+
+    /**
+     * 流式转发并显示指定 tool_choice: 客户端给了就照办("none"/指定函数)
+     * 没给维持旧默认（tools非空 -> auto）
+     */
+    @Override
+    public SseEmitter stream(List<Message> userMsgList, List<ToolDefinition> tools, JsonNode toolChoice) {
         String modelName = getEffectiveModel();
         log.debug("Stream request - model: {}, messages: {}", modelName, userMsgList.size());
 
@@ -213,8 +222,11 @@ public abstract class BaseLLMAdapter implements LLMService {
 
             try {
                 // 2.1. 发起 HTTP POST 请求，请求体里加 "stream": true
-                String toolChoice = (tools == null || tools.isEmpty()) ? null : "auto";
-                ChatRequest req = new ChatRequest(modelName, userMsgList, true, tools, toolChoice);
+                // 显示 tool_choice 优先：未给时维持旧默认（tools非空 -> auto）
+                JsonNode effectiveToolChoice = (toolChoice != null && !toolChoice.isNull())
+                        ? toolChoice
+                        : (tools == null || tools.isEmpty()) ? null : om.valueToTree("auto");
+                ChatRequest req = new ChatRequest(modelName, userMsgList, true, tools, effectiveToolChoice);
                 String json = om.writeValueAsString(req);
 
                 // 2.2 设置请求头 Accept：text/event-stream
@@ -346,7 +358,7 @@ public abstract class BaseLLMAdapter implements LLMService {
         // 任何流式配额保护应在 AgentController 用 Semaphore 做并发数上限，而不是这里
 
         // 1. 构建请求
-        String toolChoice = (tools == null || tools.isEmpty()) ? null : "auto";
+        JsonNode toolChoice = (tools == null || tools.isEmpty()) ? null : om.valueToTree("auto");
         ChatRequest req = new ChatRequest(modelName, messages, true, tools, toolChoice);
         String json = om.writeValueAsString(req);
 
