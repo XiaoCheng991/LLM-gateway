@@ -39,26 +39,30 @@ graph LR
 ```
 llm-gateway/
 ├── src/main/java/com/kyon/llmgateway/
-│   ├── adapter/              # 适配器层——对接不同 Provider
-│   │   ├── BaseLLMAdapter.java    # 抽象基类，封装 HTTP 调用逻辑
-│   │   ├── NvidiaAdapter.java     # Nvidia API 适配器
-│   │   └── OpenRouterAdapter.java # OpenRouter API 适配器
-│   ├── config/               # 配置与全局异常处理
-│   │   ├── GlobalExceptionHandler.java  # 统一异常拦截
-│   │   └── ModelConfig.java            # 模型配置
-│   ├── controller/           # REST API 入口
-│   │   ├── ChatController.java   # POST /api/chat/completions
-│   │   └── ModelController.java  # GET /api/models（待实现）
-│   ├── model/                # 数据模型
-│   │   ├── ApiResult.java        # 统一响应体
-│   │   ├── ChatRequest.java      # 聊天请求
-│   │   ├── ChatResponse.java     # 聊天响应
-│   │   ├── Message.java          # 消息体
-│   │   └── ResultCode.java       # 统一错误码
-│   └── service/              # 业务逻辑层
-│       ├── LLMService.java           # 核心接口
-│       └── LLMServiceFactory.java    # 工厂模式，按前缀路由
-└── .env                      # 环境变量（不提交 Git）
+│   ├── adapter/                  # 适配器层——对接不同 Provider
+│   │   ├── BaseLLMAdapter.java       # 抽象基类：HTTP 调用、JSON 解析、上游状态码检查
+│   │   ├── ConfigurableAdapter.java  # 唯一实现子类：按 provider 剥模型名前缀
+│   │   └── AdapterConfig.java        # @Bean 注册各 Provider 实例（配置即接入）
+│   ├── agent/                    # Agent 能力层（tool loop / 会话 / 状态机）
+│   │   ├── impl/ReActAgent.java      # ReAct 循环：思考 → 行动 → 观察
+│   │   ├── impl/SimpleAgent.java     # 直答模式
+│   │   ├── engine/                   # ToolEngine / ContextManager / TokenCounter
+│   │   ├── session/                  # SQLite 会话持久化（重启不丢历史）
+│   │   ├── state/AgentState.java     # Agent 状态机
+│   │   └── tool/                     # Tool 接口 + 5 个内置工具（计算器/时间/文件/抓取/搜索）
+│   ├── controller/               # REST API 入口
+│   │   ├── ChatController.java       # /api/chat/completions 纯转发（OpenAI 兼容）
+│   │   ├── AgentController.java      # /api/agent/* Agent 能力
+│   │   └── ModelController.java      # /api/models 可用模型列表
+│   ├── model/                    # 数据模型（ChatRequest/Response、Message、统一响应体）
+│   ├── config/                   # 全局异常处理、模型配置、链路追踪
+│   ├── observability/            # Token 桶限流 + 超限异常
+│   └── service/
+│       ├── LLMService.java           # 核心接口：chat / stream
+│       └── LLMServiceFactory.java    # 按 yml 白名单把 model 路由到 provider 实例
+├── data/                         # SQLite 会话库 + Agent 工作目录（不入库）
+├── logs/                         # 运行日志（不入库）
+└── .env                          # 环境变量（不入库，参考 .env.example）
 ```
 
 ---
@@ -71,17 +75,21 @@ llm-gateway/
 
 ```java
 public interface LLMService {
-    ChatResponse chat(List<Message> messages) throws Exception;
+    // 同步调用：可携带工具定义与 tool_choice（透传给上游，不执行工具）
+    ChatResponse chat(List<Message> messages, List<ToolDefinition> tools) throws Exception;
+
+    // 流式调用：返回 SseEmitter，帧为 OpenAI chat.completion.chunk 格式
+    SseEmitter stream(List<Message> messages, List<ToolDefinition> tools);
 }
 ```
 
-每个 Provider 实现这个接口，`ChatController` 只依赖接口，不关心背后是哪个 LLM。
+每个 Provider 是这个接口的一个实现（当前是同一个 `ConfigurableAdapter` 类的不同实例），`ChatController` 只依赖接口，不关心背后是哪个 LLM。
 
 ```mermaid
 graph TD
     Controller[ChatController] --> Factory[LLMServiceFactory]
-    Factory --> |nvidia/xxx| Nvidia[NvidiaAdapter]
-    Factory --> |openrouter/xxx| OpenRouter[OpenRouterAdapter]
+    Factory --> |nvidia/xxx| Nvidia[ConfigurableAdapter<br/>provider=nvidia]
+    Factory --> |openrouter/xxx| OpenRouter[ConfigurableAdapter<br/>provider=openrouter]
     
     subgraph LLMService[LLMService 接口]
         Base[BaseLLMAdapter<br/>抽象基类<br/>HTTP 请求 + JSON 解析]
@@ -102,39 +110,27 @@ graph TD
 请求进来时，根据 model 名的前缀决定走哪个 Provider：
 
 ```java
-// model = "nvidia/deepseek-ai/deepseek-v4-flash"
-// prefix = "nvidia" → 路由到 NvidiaAdapter
-String prefix = modelName.split("/")[0].toLowerCase();
-return switch (prefix) {
-    case "openrouter" -> openRouterAdapter;
-    case "nvidia"     -> nvidiaAdapter;
-    default -> throw new IllegalArgumentException("不支持的 Provider");
-};
+// LLMServiceFactory.getLlmService(modelName) 的真实逻辑
+// 1. 在 yml 的 llm.models 白名单里按 model 全名查到 provider
+String provider = modelConfig.getProviderByModel(modelName.toLowerCase());
+// 2. 用 provider 名从 providerMap 取实例，并把本次 model 传给它
+LLMService service = providerMap.get(provider);
+if (service instanceof BaseLLMAdapter adapter) {
+    adapter.setCurrentModel(modelName);   // 之后 getEffectiveModel() 负责剥掉 provider 前缀
+}
+return service;
 ```
 
-添加新 Provider 只需要两步：1) 写一个 Adapter 继承 `BaseLLMAdapter`，2) 在工厂里加一个 case。
+模型名 → Provider 的映射**不在代码里，在 yml 白名单里**——换模型、加模型只改配置不改代码。
 
 ---
 
 ## 当前支持的 Provider
 
-| Provider       | 模型                                           | 非流式 | 流式 (SSE) |
-|----------------|----------------------------------------------|-----|----------|
-| **Nvidia**     | `nvidia/deepseek-ai/deepseek-v4.1-flash`     | ✅   | ✅        |
-| **Nvidia**     | `nvidia/stepfun-ai/step-5-preview`（原生推理）     | ✅   | ✅        |
-| **Nvidia**     | `nvidia/z-ai/glm-5.3-flash`                  | ✅   | ✅        |
-| **OpenRouter** | `openrouter/minimax/minimax-m3.1-flash:free` | ✅   | ✅        |
-| **Agnes**      | `agnes/agnes-3.0-flash`                      | ✅   | ✅        |
-
-
-### 端点边界职责
-
-| 端点 | 职责 | 是否执行 tool loop |
-|------|------|-------------------|
-| `POST /api/chat/completions` | 纯 LLM 转发，严格 OpenAI 兼容 | ❌ 只透传 `tools` 给模型 |
-| `POST /api/agent/chat` | Agent 同步对话 | ✅ SimpleAgent / ReActAgent |
-| `POST /api/agent/stream` | Agent 流式对话（StreamEvent） | ✅ |
-
+| Provider | 模型 | 非流式 | 流式 (SSE) |
+|----------|------|--------|------------|
+| **Nvidia** | `nvidia/deepseek-ai/deepseek-v4-flash` | ✅ | ⏳ 开发中 |
+| **OpenRouter** | `openrouter/owl-alpha` | ✅ | ⏳ 开发中 |
 
 ---
 
@@ -166,12 +162,13 @@ mvn spring-boot:run
 ### 3. 发送你的第一个请求
 
 ```bash
-curl -N -X POST http://localhost:8080/api/chat/completions \
+curl -X POST http://localhost:8080/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "openrouter/minimax/minimax-m3.1-flash:free",
-    "stream": true,
-    "messages": [{"role": "user", "content": "你好！"}]
+    "model": "openrouter/owl-alpha",
+    "messages": [
+      {"role": "user", "content": "你好！"}
+    ]
   }'
 ```
 
@@ -181,7 +178,7 @@ curl -N -X POST http://localhost:8080/api/chat/completions \
 curl -X POST http://localhost:8080/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "openrouter/owl-alpha",
+    "model": "openrouter/minimax/minimax-m3.1-flash:free",
     "messages": [
       {"role": "user", "content": "我叫强子"},
       {"role": "assistant", "content": "你好强子！"},
@@ -198,7 +195,7 @@ curl -X POST http://localhost:8080/api/chat/completions \
   "msg": "success",
   "data": {
     "content": "...",
-    "model": "openrouter/owl-alpha",
+    "model": "minimax/minimax-m3.1-flash:free",
     "inputTokens": 45,
     "outputTokens": 120,
     "latency": 1234
@@ -248,7 +245,10 @@ JDK 11+ 内置，无需外部依赖。支持 HTTP/2、异步调用、流式响�
 - 工厂模式路由 + 多轮对话支持
 - 统一响应格式 (`ApiResult<T>`) + 全局异常处理
 - `.env` + `spring-dotenv` 密钥管理
-- SSE 流式响应（OpenAI `chat.completion.chunk` 帧 + usage 帧 + `[DONE]` 结束）
+
+### 🚧 进行中
+
+- **SSE 流式响应** — 让 AI 回复逐字推送给客户端
 
 ### 📋 规划
 
@@ -265,28 +265,20 @@ JDK 11+ 内置，无需外部依赖。支持 HTTP/2、异步调用、流式响�
 
 ### 添加新 Provider
 
-1. 在 `adapter/` 包下新建 `XxxAdapter.java`
-2. 继承 `BaseLLMAdapter`，实现 `getBaseUrl()` / `getApiKey()` / `getModelName()`
-3. 在 `LLMServiceFactory` 的 switch 中添加路由 case
+当前架构下"接入一个 Provider"分两层：
 
-```java
-@Service
-public class XxxAdapter extends BaseLLMAdapter {
-    @Value("${llm.xxx.base-url}") private String BASE_URL;
-    @Value("${llm.xxx.api-key}") private String API_KEY;
-    private static final String MODEL = "xxx/model-name";
-
-    @Override protected String getBaseUrl() { return BASE_URL; }
-    @Override protected String getApiKey() { return API_KEY; }
-    @Override protected String getModelName() { return MODEL; }
-}
-```
+1. **协议是 OpenAI 兼容的**（绝大多数主流 API）：零代码，三处配置——
+   `application.yml` 的 `llm.<provider>` 下加 `base-url` / `api-key`，
+   `AdapterConfig` 加一个 `@Bean`（`new ConfigurableAdapter("<provider>", baseUrl, apiKey)`），
+   `llm.models` 白名单里登记该 provider 的模型名。
+2. **协议完全不同的 Provider**：新写一个类继承 `BaseLLMAdapter`，覆写请求构建/响应解析逻辑，
+   再同样注册进 `AdapterConfig` 与工厂的 `providerMap`（自动收集所有 `BaseLLMAdapter` 实例）。
 
 ---
 
 ## 踩坑记录
 
-- **Nvidia API 响应极慢 (80s+)** — 目前表现为上游 API 延迟，原因待排查
+- **Nvidia API 响应极慢/429** — 已定位：上游限流与降级（实测出现 429、300s+ 延迟）；修复前同步请求还会把上游错误静默成空响应，已补上游状态码检查（详见 git log 中的 P0 修复）
 - **JSON 字段大小写** — Spring Boot 4.x 使用 Jackson 3.x (tools.jackson 包)，`ObjectMapper` 的包名从 `com.fasterxml.jackson` 变为 `tools.jackson`
 - **`--enable-preview` 不支持 JDK 21** — Java 21 不是预览版本，移除该编译参数
 - **GitHub Push Protection** — API Key 被 GitHub Secret Scanning 拦截，改用 `.env` + `.gitignore` 解决

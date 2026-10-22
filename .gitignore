@@ -34,6 +34,7 @@ build/
 ### 配置密钥 ###
 .env
 .env.*
+!.env.example
 
 ### gsd 文档 ###
 .planning/*
