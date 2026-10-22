@@ -18,6 +18,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
@@ -47,6 +48,9 @@ public class AgentController {
     private ContextManager contextManager;
     @Resource
     private LLMServiceFactory llmServiceFactory;
+
+    @Value("${llm.compact-secret}")
+    private String compactSecret;
 
     private final ExecutorService streamExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -102,7 +106,7 @@ public class AgentController {
     @ResponseBody
     public ApiResult<Map<String, Object>> compact(@RequestBody CompactRequest request) throws Exception {
         // 简单 secret 校验（生产环境应该换成 JWT/Session 鉴权）
-        if (!"llm-gateway-compact-secret".equals(request.getSecret())) {
+        if (!compactSecret.equals(request.getSecret())) {
             return ApiResult.error(ResultCode.UNAUTHORIZED, "未授权");
         }
 

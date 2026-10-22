@@ -7,6 +7,7 @@ spring:
 # 模型相关配置
 llm:
   default-context-window: 32000  # 上下文窗口阈值：ReAct 85% 预警与 ContextManager 70% 摘要共用的单一源头
+  compact-secret: ${COMPACT_SECRET}  # /api/agent/compact 调用密钥
   sse-timeout: 300000  # 5分钟，毫秒
   agnes:
     api-key: ${AGNES_API_KEY}
