@@ -48,7 +48,7 @@ public class ContextManager {
         while (total > MAX_TOKENS && result.size() > 1) {
            // 减去被移除消息的 token 数
             Message removed = result.remove(index);
-            total -= TokenCounter.estimateTokens(removed.getContent()) + 5; // +5 是消息格式开销
+            total -= TokenCounter.estimateMessage(removed);
         }
         return new ArrayList<>(result);
     }

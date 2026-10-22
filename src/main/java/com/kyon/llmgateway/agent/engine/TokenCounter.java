@@ -30,12 +30,25 @@ public class TokenCounter {
     }
 
     /**
+     * 估算单个消息的 token ：content 与 tool_calls 都要算
+     * 工具轮的 assistant 的 counter 近空 而 tool_calls 很大
+     * 只数 content 会系统性低估--这是字段级别漏算，不是字符级
+     */
+    public static int estimateMessage(Message message) {
+        // +5 是消息格式的开销(role、content 等字段的 token成本)
+        int tokens = estimateTokens(message.getContent()) + 5;
+        if (message.getToolCalls() != null && !message.getToolCalls().isEmpty()) {
+            tokens += estimateTokens(message.getToolCalls().toString());
+        }
+        return tokens;
+    }
+
+    /**
      * 估算消息列表总 token 数
      */
     public static int estimateMessages(List<Message> messages) {
-        // +5 是消息格式的开销(role、content 等字段的 token成本)
         return messages.stream()
-                .mapToInt(m -> estimateTokens(m.getContent()) + 5)
+                .mapToInt(TokenCounter::estimateMessage)
                 .sum();
     }
 }
