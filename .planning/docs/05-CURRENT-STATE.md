@@ -153,6 +153,16 @@
     ③ 异常进 `GlobalExceptionHandler` → `No converter for ApiResult with preset Content-Type 'text/event-stream'` 双故障只剩 WARN（17:19:43 与 18:15:22 两次实证）——推理待证：客户端在线时同路可能挂到超时（fail-silent 亲缘）。
     修法归 SSE 打磨包：断开走 INFO/DEBUG + 检查点改为 send 失败即置位，SSE 上下文让 JSON handler 短路。**随手笔**。**T7 验证时新发现**
 
+### ✅ 2026-10-22 批次销账：阈值族 + 随手笔全清（7 条）
+- **#3** estimateMessages 漏 tool_calls → ✅ `71547e2`（`estimateMessage` 统一口径；ContextManager:53 第 7 现场同批修复）
+- **#6** 32000 双源头 → ✅ `c0cdf81`（yml `llm.default-context-window` 单一源头 + 两处 @Value 注入；per-model 真实窗口另立后续项）
+- **#10** usage 帧被跳过 → ✅ `a9660b6`（读取前移）+ **实证定性**：对照 A（不带 include_usage）上游不发独立 usage 帧 → 潜伏未踩雷维持 P2；对照 B 证 OpenRouter 将 usage 附于正常帧
+- **#4** inputTokens 恒 0 → ✅ `b18591a`（同步 React/PLAN 双路跨轮累计；实测 `inputTokens:2109/2277`）
+- **#5** 状态机半接线 → ✅ `16b244e`（终态重入白名单 DONE/ERROR→{IDLE,THINKING,PLANNING} + 流式补 ACTING 跳；实测同 session 重入零告警，流式 STATE 序列 `THINKING→ACTING→THINKING→DONE` 首次如实广播）
+- **#7** compact 硬编码 secret → ✅ `6d6ed65`（@Value 注入 + `.env` `COMPACT_SECRET`；实测错值 401/真值 200；"上线前门禁"标签解除）
+- **#12** 迁移双实现 → ✅ `606109e`（合并单一 `transitionTo`，emitter 可空即静默）
+- **提交勘误 3**：`a9660b6`（fix[sse]）夹带 ReActAgent 的 PLAN 空计划守卫删除——实证无害（`getJsonNode` 内有重复守卫 + `@NonNull`，行为等价；null 时日志略糙），以本条为准；`2408a1d` 标题声明双主题同惯例。**"顺手夹带"已三振（`98482bd`/`13b12a8`/`a9660b6`），此后每笔提交前 diff 逐行对标题自查。**
+
 **分级判据（M6 定案）**：P0 = 已实证发生 **且** 无声/伪装成功 **且** 打到钱或数据——新 14 条无一满足三条全齐，故无 P0；
 "高危未实证"（#1）与"已实证但可见有替代"（#2）均为 P1。
 
