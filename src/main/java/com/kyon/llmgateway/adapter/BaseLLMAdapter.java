@@ -146,7 +146,7 @@ public abstract class BaseLLMAdapter implements LLMService {
 
         return ChatResponse.builder()
                 .content(content)
-                .model(model)
+                .model(respModel)
                 .inputTokens(inputTokens)
                 .outputTokens(outputTokens)
                 .estimated(false)
