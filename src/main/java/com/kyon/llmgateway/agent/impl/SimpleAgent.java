@@ -45,6 +45,7 @@ public class SimpleAgent implements Agent {
             request.setSessionId(sessionManager.newSessionId());
         }
         String sessionId = request.getSessionId();
+        String model = request.getModel();
 
         // 2. 追加用户消息到 Session
         sessionManager.append(sessionId, new Message("user", request.getMessage(), null, null, null));
@@ -70,7 +71,7 @@ public class SimpleAgent implements Agent {
 
             // 调 LLM
             LLMService service = llmServiceFactory.getLlmService(request.getModel());
-            lastResponse = service.chat(history, tools);
+            lastResponse = service.chat(model, history, tools);
 
             if (lastResponse == null || !lastResponse.hasToolCalls()) {
                 break;
@@ -120,6 +121,7 @@ public class SimpleAgent implements Agent {
                 request.setSessionId(sessionManager.newSessionId());
             }
             String sessionId = request.getSessionId();
+            String model = request.getModel();
 
             // 2. 追加用户消息
             sessionManager.append(sessionId, new Message("user", request.getMessage(), null, null, null));
@@ -146,8 +148,7 @@ public class SimpleAgent implements Agent {
 
                 // 用 chatStreaming 替代 chat，delta 通过StreamEvent 推出去
                 lastResponse = service.chatStreaming(
-                        history,
-                        tools,
+                        model, history, tools,
                         delta -> emitter.accept(StreamEvent.content(delta))
                 );
                 if (lastResponse == null || !lastResponse.hasToolCalls()) {

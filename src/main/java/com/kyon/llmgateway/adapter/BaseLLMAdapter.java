@@ -10,8 +10,6 @@ import com.kyon.llmgateway.observability.TokenBucketRateLimiter;
 import com.kyon.llmgateway.service.LLMService;
 import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
-import lombok.Getter;
-import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,14 +47,9 @@ public abstract class BaseLLMAdapter implements LLMService {
     @Value("${llm.sse-timeout:300000}") // 默认5分钟
     private long sseTimeout;
 
-    // 供 Factory 调用，设置 model
-    // 新增：存路由时传进来的 model
-    @Getter
-    @Setter
-    private String currentModel;
-
-    protected String getEffectiveModel() {
-        return currentModel;  // 默认原样返回
+    // 模型名按请求显式传参
+    protected String getEffectiveModel(String model) {
+        return model;
     }
 
     // 子类仅需要提供三个配置
@@ -77,18 +70,18 @@ public abstract class BaseLLMAdapter implements LLMService {
     );
 
     @Override
-    public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools) throws Exception {
+    public ChatResponse chat(String model, List<Message> userMsgList, List<ToolDefinition> tools) throws Exception {
         // 工具存在时默认 “auto”，否则不发 tool_choice 字段
         JsonNode toolChoice = (tools == null || tools.isEmpty()) ? null : om.valueToTree("auto");
-         return chat(userMsgList, tools, toolChoice);
+        return chat(model, userMsgList, tools, toolChoice);
     }
 
     /**
      * 普通 Loop 调用请求
      */
     @Override
-    public ChatResponse chat(List<Message> userMsgList, List<ToolDefinition> tools, JsonNode toolChoice) throws Exception {
-        String modelName = getEffectiveModel();
+    public ChatResponse chat(String model, List<Message> userMsgList, List<ToolDefinition> tools, JsonNode toolChoice) throws Exception {
+        String modelName = getEffectiveModel(model);
         log.debug("Chat request - model: {}, messages: {}", modelName, userMsgList.size());
 
         // 0. 非消耗性预检：看桶里“现在”够不够，但不扣token
@@ -134,7 +127,7 @@ public abstract class BaseLLMAdapter implements LLMService {
                 .path("message").path("content").asString("");
         Integer inputTokens = root.path("usage").path("prompt_tokens").asInt(0);
         Integer outputTokens = root.path("usage").path("completion_tokens").asInt(0);
-        String model = root.path("model").asString(currentModel);
+        String respModel = root.path("model").asString(model);
         // 获取工具相关
         String finishReason = root.path("choices").path(0).path("finish_reason").asString("");
 
@@ -189,8 +182,8 @@ public abstract class BaseLLMAdapter implements LLMService {
      * 不执行 tool loop：上游返回的 delta.tool_calls 原样透传给客户端。
      */
     @Override
-    public SseEmitter stream(List<Message> userMsgList, List<ToolDefinition> tools) {
-        return stream(userMsgList, tools, null);
+    public SseEmitter stream(String model, List<Message> userMsgList, List<ToolDefinition> tools) {
+        return stream(model, userMsgList, tools, null);
     }
 
     /**
@@ -198,8 +191,8 @@ public abstract class BaseLLMAdapter implements LLMService {
      * 没给维持旧默认（tools非空 -> auto）
      */
     @Override
-    public SseEmitter stream(List<Message> userMsgList, List<ToolDefinition> tools, JsonNode toolChoice) {
-        String modelName = getEffectiveModel();
+    public SseEmitter stream(String model, List<Message> userMsgList, List<ToolDefinition> tools, JsonNode toolChoice) {
+        String modelName = getEffectiveModel(model);
         log.debug("Stream request - model: {}, messages: {}", modelName, userMsgList.size());
 
         // 1. 创建 SseEmitter，设置 5 分钟超时
@@ -349,8 +342,8 @@ public abstract class BaseLLMAdapter implements LLMService {
      * @param onContentDelta 每个 content delta 的回调，推给前端
      * @return 完整的 ChatResponse（含 finishReason 和 toolCalls）
      */
-    public ChatResponse chatStreaming(List<Message> messages, List<ToolDefinition> tools, Consumer<String> onContentDelta) throws Exception {
-        String modelName = getEffectiveModel();
+    public ChatResponse chatStreaming(String model, List<Message> messages, List<ToolDefinition> tools, Consumer<String> onContentDelta) throws Exception {
+        String modelName = getEffectiveModel(model);
         log.debug("Streaming chat request -  model: {}, messages: {}", modelName, messages.size());
         // 注意：流式接口暂不进入限流
         // 业界惯例：SSE 长连接不适合令牌桶模型（连接持有时间长，扣Token时机不明确）

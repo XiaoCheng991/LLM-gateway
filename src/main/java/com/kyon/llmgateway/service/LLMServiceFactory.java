@@ -49,10 +49,7 @@ public class LLMServiceFactory {
             throw new IllegalArgumentException("Unsupported provider: %s".formatted(provider));
         }
 
-        // 把 model 传给 Adapter
-        if (service instanceof BaseLLMAdapter adapter) {
-            adapter.setCurrentModel(modelName);
-        }
+        // 模型名字由各调用方作为参数显式传入
         return service;
     }
 }

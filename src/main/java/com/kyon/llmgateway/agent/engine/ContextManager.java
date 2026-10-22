@@ -112,7 +112,7 @@ public class ContextManager {
                 log.warn("LLMService 获取失败, 跳过摘要压缩");
                 return messages;
             }
-            ChatResponse response = service.chat(summaryInput, null);
+            ChatResponse response = service.chat(model, summaryInput, null);
             if (response == null || response.getContent() == null || response.getContent().isBlank()) {
                 log.warn("LLMService 摘要生成失败, 跳过摘要压缩");
                 return messages;

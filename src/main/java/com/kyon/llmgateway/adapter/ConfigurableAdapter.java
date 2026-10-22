@@ -21,9 +21,8 @@ public class ConfigurableAdapter extends BaseLLMAdapter {
     protected String getApiKey() { return apiKey; }
 
     @Override
-    public String getEffectiveModel() {
+    public String getEffectiveModel(String model) {
         // 去掉前缀
-        String model = super.getCurrentModel();
         if (model == null || model.isBlank()) {
             throw new IllegalArgumentException("模型名缺失");
         }

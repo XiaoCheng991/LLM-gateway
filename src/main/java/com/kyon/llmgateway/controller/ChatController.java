@@ -42,7 +42,9 @@ public class ChatController {
      */
     @PostMapping("/completions")
     public Object chat(@RequestBody ChatRequest request) throws Exception {
-        LLMService service = llmServiceFactory.getLlmService(request.getModel());
+        String model = request.getModel();
+
+        LLMService service = llmServiceFactory.getLlmService(model);
 
         // 归一化：没有 tools 就不携带 tool_choice（否则上游 400）
         List<ToolDefinition> tools = request.getTools();
@@ -50,9 +52,9 @@ public class ChatController {
 
         // 开启 stream 则使用 stream 的方法
         if (Boolean.TRUE.equals(request.getStream())) {
-            return service.stream(request.getMessages(), tools, toolChoice);
+            return service.stream(model, request.getMessages(), tools, toolChoice);
         }
-        ChatResponse response = service.chat(request.getMessages(), tools, toolChoice);
+        ChatResponse response = service.chat(model, request.getMessages(), tools, toolChoice);
         return ApiResult.success(response);
     }
 }

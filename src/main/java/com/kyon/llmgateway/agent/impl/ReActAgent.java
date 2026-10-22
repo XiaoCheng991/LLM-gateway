@@ -88,6 +88,7 @@ public class ReActAgent implements Agent {
     // 同步 React 循环
     private AgentResponse executeReactModeSync(List<Message> messages, AgentRequest request) throws Exception {
         String sessionId = request.getSessionId();
+        String model = request.getModel();
         transitionTo(sessionId, AgentState.THINKING, null);
 
         List<ToolDefinition> tools = buildToolDefinitions();
@@ -104,7 +105,7 @@ public class ReActAgent implements Agent {
 
             // 重点：调用 chat() 方法
             LLMService service = llmServiceFactory.getLlmService(request.getModel());
-            ChatResponse response = service.chat(messages, tools);
+            ChatResponse response = service.chat(model, messages, tools);
             if (response != null) {
                 // 多轮工具循环每轮都是一次真实上游调用：用量跨轮累计
                 totalInputTokens += response.getInputTokens() != null ? response.getInputTokens() : 0;
@@ -174,6 +175,7 @@ public class ReActAgent implements Agent {
 
     private AgentResponse executePlanModeSync(List<Message> messages, AgentRequest request) throws Exception {
         String sessionId = request.getSessionId();
+        String model = request.getModel();
         transitionTo(sessionId, AgentState.PLANNING, null);
 
         // 1. 让 LLM 生成计划
@@ -186,7 +188,7 @@ public class ReActAgent implements Agent {
         planMessages.add(new Message("user", planPrompt, null, null, null));
 
         LLMService service = llmServiceFactory.getLlmService(request.getModel());
-        ChatResponse planResponse = service.chat(planMessages, null);
+        ChatResponse planResponse = service.chat(model, planMessages, null);
         String planJson = planResponse != null ? planResponse.getContent() : null;
 
         if (planJson == null || planJson.isBlank()) {
@@ -296,6 +298,7 @@ public class ReActAgent implements Agent {
     // ============ REACT 模式 =============
     private void executeReactMode(List<Message> messages, AgentRequest request, Consumer<StreamEvent> emitter) throws Exception {
         String sessionId = request.getSessionId();
+        String model = request.getModel();
         transitionTo(sessionId, AgentState.THINKING, emitter);
 
         List<ToolDefinition> tools = buildToolDefinitions();
@@ -314,7 +317,7 @@ public class ReActAgent implements Agent {
 
             LLMService service = llmServiceFactory.getLlmService(request.getModel());
             ChatResponse response = service.chatStreaming(
-                    messages, tools,
+                    model, messages, tools,
                     delta -> extractThoughtAndStream(delta, thoughtBuffer, inThought, emitter)
             );
             fullResponse = response != null ? response.getContent() : "";
@@ -385,6 +388,7 @@ public class ReActAgent implements Agent {
     private void executePlanMode(List<Message> messages, AgentRequest request,
                                  Consumer<StreamEvent> emitter) throws Exception {
         String sessionId = request.getSessionId();
+        String model = request.getModel();
         transitionTo(sessionId, AgentState.PLANNING, emitter);
 
 
@@ -398,7 +402,7 @@ public class ReActAgent implements Agent {
         planMessages.add(new Message("system", planPrompt, null, null, null));
 
         LLMService service = llmServiceFactory.getLlmService(request.getModel());
-        ChatResponse planResponse = service.chat(planMessages, null);
+        ChatResponse planResponse = service.chat(model, planMessages, null);
         String planJson = planResponse != null ? planResponse.getContent() : null;
 
         if (planJson == null || planJson.isBlank()) {
