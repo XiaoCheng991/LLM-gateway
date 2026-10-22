@@ -1,4 +1,4 @@
-# 当前状态（2026-10-16 晚实测）
+# 当前状态（2026-10-22 晚实测）
 
 **验证方式:** 编译 + 起服务 + curl 三 Provider + grep/字节码检查（非推测）
 
@@ -115,6 +115,9 @@
    → 并发同 Provider、不同模型的两个请求互相覆盖 → **请求打到错误的模型**。
    读取端：`ConfigurableAdapter.getEffectiveModel()`（经 `super.getCurrentModel()`）→ `BaseLLMAdapter:91/188/336` 三处。
    分级：影响高（错模型+错计费）× 触发需并发（当前单人串行未实证发生）× 成本中大（改签名需全量 grep）→ **绑 T6 顺路改签名**
+   → ✅ 已修（`e7df86c`：模型名改方法参数——`LLMService` 5 方法全加 `String model` 首参、删 `currentModel` 字段及 getter/setter、Factory 删 `setCurrentModel` 块、9 调用点补参，8 文件编译器清扫保证同笔原子；补笔 `5a94a12`——手工改名局部变量 `model`→`respModel` 漏了下游两处引用，`data.model` 退化成裸请求名、`respModel` 变死变量；再补 `c170ccd` 完成日志参数）
+   → **行为证据**（2026-10-22 实测）：奇偶复验 `data.model` 回到上游回显（`minimax/...` 去前缀）；NVIDIA 同 Provider 双模型三轮并发 **6/6 归属正确零串号**（竞态定向判别测）；日志零 ERROR/WARN
+   → **补笔教训**：javac 对"同类型、同作用域"的新引用静默放行——**编译器保类型，保不了本意**；是修复前后同请求的 `data.model` 奇偶对比揪出来的 → 手工改名必须逐引用过一遍，优先用 IDE 重命名符号
 2. 🟠 **P1** **`reasoning_content` 丢弃** — 同步 `chat()` 只读 `choices[0].message.content`（`BaseLLMAdapter:123-124`）；
    `chatStreaming` 只读 `delta.content`（约 L390）→ 原生推理模型（step-5）的思考/偶发答案全丢：无 thinking 事件、空回答（冒烟已实证）；
    `stream()` 透传不丢（`delta` 原样嵌入 L297）——**同一模型两条出口表现不一致**。
@@ -161,6 +164,14 @@
 17. 🟡 **P2** **同步 React 路异常后 session 状态残留 → 假 WARN** — `executeReactModeSync` 入口 `ReActAgent:91` 置 THINKING 后，循环内异常（如 `L106` `getLlmService(null)` 抛 `IllegalArgumentException`）无 catch/finally 兜底、直穿全局处理器回 400，session 状态停在 THINKING；下个同 session 请求入口再置 THINKING → 空打 `非法状态转换: THINKING -> THINKING`（`transitionTo` 在 warn 后 `return next` 强行置目标态，功能无损）
     实证（2026-10-22 冒烟自伤）：14:36:34 失败请求（缺 model）留脏态 → 14:36:57 成功请求报 WARN；历史同款 26 次（13:22-13:45）证既有现象非本次回归。排障盲区：同步路成功转换静默（`transitionTo` 的 debug 日志挂在 `emitter != null` 下），脏态零痕迹只能靠 WARN 反推
     分级：仅告警噪音（#5 告警疲劳族亲缘）→ 修法：React 同步路异常兜底 transition ERROR（或入口放行 THINKING 自指）→ **随手笔**
+18. 🟡 **P2** **compact `compressionRatio` 运算符优先级错位** — `AgentController:129` `1.0 - (double) compressedTokens / originalTokens * 100`：`*` 与 `/` 同优先级左结合，乘 100 先跟了除法 → 算成 `1−37.3` 显示 **`-36.3%`**（真实压缩 62.7%）；纯显示层错数，压缩功能本身正常。修 = 括号整体乘 100。**2026-10-22 #1 收尾验证时新发现**
+    → ✅ 已修（`445f54d`）。复验 compact 返回 `54.0%`（2291→1055 token）正数 ✓
+19. 🟡 **P2** **SimpleAgent 经 HTTP 不可达** — `AgentRequest:31-33` 自定义 getter `mode != null ? mode : REACT` 把显式 `"mode":null` 兜底回 REACT → 控制器两分支（chat L67 / stream L88）判 `getMode() != null` **恒真** → else 分支成**死代码**，而流式分支 javadoc 明写 "mode=react|plan_execute → ReAct，其他/null → SimpleAgent（向后兼容）"——设计与实现背离；前序对话"显式 `mode:null` 即达 SimpleAgent"的结论系漏读该 getter 的误判，以本条为准。
+    消费方核验：ReActAgent L80/L291 为 `== PLAN_EXECUTE` 比较（null 安全）、L549 克隆拷贝下游同构 → 删 getter 无连锁。**2026-10-22 #1 收尾验证时新发现**
+    → ✅ 已修（`7d8fe8f`：删三行自定义 getter）。复验：同步 `mode:null` → 200 + 工具轮（SimpleAgent L73 行为覆盖）；流式 `mode:null` → 窗口零状态行 + 零 ReActAgent 行 + `Streaming chat request` 在场（L148 行为覆盖，修复前恒出 4 条 ReAct 状态行）
+20. 🟡 **P2** **SimpleAgent 流式事件序列化双雷** — ① `SimpleAgent:159` 对 `tool_calls` 的 **ArrayNode 调 `.asString()`** → Jackson 拒绝标量强制转换，首工具轮必炸（堆栈实证 `'ArrayNode' asString() cannot coerce`）；② L173 手搓 `formatted` JSON，工具输出带引号即发畸形帧（file_io/web_fetch 必中）。
+    **定性：#19 修复暴露的潜伏雷，非回归**——路由打通前该行不可达，"不可达的代码不是安全的代码，是没被测过的代码"。**2026-10-22 #19 复验时新发现**
+    → ✅ 已修（`211e315`：`toString()` 对齐 ReActAgent L339 + `Map.of`/`writeValueAsString` 对齐 L350-351）。复验：35 帧、零 error 事件、尾部 `event:done`、两工具调用全执行；编译告警仅 ToolEngine 既存 deprecation 一条
 
 ### ✅ 2026-10-22 批次销账：阈值族 + 随手笔全清（7 条）
 - **#3** estimateMessages 漏 tool_calls → ✅ `71547e2`（`estimateMessage` 统一口径；ContextManager:53 第 7 现场同批修复）
@@ -178,12 +189,20 @@
 - **判别测五连全绿**（2026-10-22 实测）：① 流式 `"none"` + 强制工具措辞 → 92 帧零 `tool_calls`；② 同步对象形态 → 200 + `finishReason:tool_calls` + calculator 参数正确（修复前 500）；③ 流式对象形态 → `tool_calls` 5 处；④ 同步无 tools → 200 正常答；⑤ agent 冒烟 → `777*333` 工具轮闭环。①③构成单变量对照（仅 `tool_choice` 之差），证透传到上游真实生效
 - **勘误 4**：#13 原记修法"四处含 `AgentController`"系误报，实为三文件——详见 #13 条目
 
+### ✅ 2026-10-22 晚批次销账：竞态族 #1 + 验证捞出三连（4 条）
+- **#1** `currentModel` 共享字段竞态 → ✅ `e7df86c` + 补笔 `5a94a12`/`c170ccd`（证据链与补笔教训详见 #1 条目）
+  - 核心判别测：NVIDIA 同 Provider 双模型（`step-5-preview`/`glm-5.3-flash`）三轮并发交替，每响应 `data.model` 逐一对号
+- **#18 / #19 / #20** 验证捞出、当日修完 → ✅ `445f54d` / `7d8fe8f` / `211e315`（详见三条目）
+  - **路径教训**：删 getter 打通死路由（#19）→ 立刻引爆同路径潜伏雷（#20）——**不可达的代码不是安全的代码，是没被测过的代码**；修复路由是给暗道点灯，不是制造回归
+- **SimpleAgent 双路行为覆盖补全**：此前仅编译级（编译器清扫），本轮同步（L73）/流式（L148）均获行为级证据
+- 收尾日志：新实例 49 行窗口零 ERROR / 零 WARN / 零 Stream 处理失败
+
 **分级判据（M6 定案）**：P0 = 已实证发生 **且** 无声/伪装成功 **且** 打到钱或数据——新 14 条无一满足三条全齐，故无 P0；
 "高危未实证"（#1）与"已实证但可见有替代"（#2）均为 P1。
 
-**打包策略**：**T6 包** = #11 + #2 + #1 + #8 + #9（同一波签名/历史改动，全量 grep）；
-**阈值族** = #3 + #6 + #10（独立小笔可提前修）；**随手笔** = #4、#5、#7、#12；
-**tool_choice 族** = #13 + #14（同波接口签名贯通，一波修）。
+**打包策略**：**T6 包** = #11 + #2 + #1 + #8 + #9（同一波签名/历史改动，全量 grep）→ 已清 #11（`b60cdee`）与 #1（本批），**残余 #2 + #8 + #9**；
+**阈值族** = #3 + #6 + #10（已清）；**随手笔** = #4、#5、#7、#12（已清），另挂 #16 + #17；
+**tool_choice 族** = #13 + #14（已清）。
 
 ### 🗂 事故模式档案（2026-10-20）
 - **fail-silent 双合谋**：无状态码检查 × 行前缀过滤——每层单看合理，叠起来把上游 400 吞成"成功空响应"（对照 fail-open：出错降级放行，本例是出错伪装成功）
@@ -193,11 +212,12 @@
 
 ---
 
-## 三、下一步（顺序）
+## 三、下一步（顺序，2026-10-22 晚更新）
 
-1. **拆原子提交**：Adapter 重构 → T4 → 注释/chore → docs（见第一节清单）
-2. **继续整体复习**（进行中）：项目全景已讲过一轮，按你的节奏深入，直到完全搞明白
-3. **回 T4**：验证重写后的 `stream()`（注意：当前无 HTTP 入口，
-   需 T6 接线后才能 curl 实测，或临时用 jshell/测试端点验证格式）
-4. T5-T8 SSE 收尾 → 06-02 Eval
-5. 顺手项：yml 模型列表清理（P0 状态码 `98482bd` 已修、Agnes 域名对齐已核验销账 2026-10-22）
+1. **T6 包残余**：#2 `reasoning_content` 丢弃 → #8 `<thinking>` 进历史 → #9 PLAN 漂移（同波签名/历史改动，全量 grep）
+2. **随手笔挂账**：#16 SSE 断开打磨包 + #17 同步 React 假 WARN
+3. **06-02 Eval 实施**（06-02-PLAN T1-T12 为工作手册；06-01-PLAN 遗留 T5-T8 届时核对）
+4. M7 复习考（定案：Eval 完工后当结业考）
+5. 顺手项：yml 模型列表清理（P1 模型数据过期；P0 状态码 `98482bd` 已修、Agnes 域名已核验销账 2026-10-22）
+
+> 旧清单"拆原子提交 / 整体复习 / 回 T4"三项已失效（2026-10-22 核验：工作区净；`stream()` 经多轮 SSE 判别测实证）。
