@@ -39,7 +39,7 @@ public class ReActAgent implements Agent {
     private static final double WARN_THRESHOLD = 0.85;
 
     @Value("${llm.default-context-window}")
-    private int contextWindow = 32000;
+    private int contextWindow;
 
     // thinking 标签常量
     private static final String OPEN_TAG = "<thinking>";
