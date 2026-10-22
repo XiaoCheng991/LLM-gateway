@@ -126,7 +126,7 @@ public class AgentController {
         Map<String, Object> result = Map.of(
                 "originalTokens", originalTokens,
                 "compressedTokens", compressedTokens,
-                "compressionRatio", String.format("%.1f%%", (1.0 - (double) compressedTokens / originalTokens * 100)),
+                "compressionRatio", String.format("%.1f%%", ((1.0 - (double) compressedTokens / originalTokens) * 100)),
                 "messageCount", messages.size()
         );
 
