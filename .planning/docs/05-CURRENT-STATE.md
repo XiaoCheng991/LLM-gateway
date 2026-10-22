@@ -35,14 +35,17 @@
 
 ## 二、已知问题清单
 
-### 🔴 P0：`BaseLLMAdapter.chat()` 不检查 HTTP 状态码
+### ✅ P0 已修复（`98482bd`，2026-10-21）：`BaseLLMAdapter.chat()` 不检查 HTTP 状态码
 - **实证**：NVIDIA 上游返回 `410 Gone`（模型已 EOL），`chat()` 只找 body 里的
   `error` 字段，410 的 `{"type":"about:blank",...}` 没有该字段 → 落到 `choices` 缺失
   → 返回 `content:""` 且 HTTP 200"成功"
 - **这就是长期"空 content"之谜的根因**（此前误判为 ReAct 不产出）
 - 对照：流式路径 L227 有 `statusCode() >= 400` 检查——**同步路径漏了**
-- 修法（学习模式，由你动手）：`chat()` 拿到响应后先判
-  `response.statusCode() >= 400`，抛出带状态码的异常（参考 Phase 4 审查建议的 `LLMHttpException`）
+- **2026-10-21 已修**（`98482bd`）：`statusCode() >= 400` → 抛带状态码与错误体的 `RuntimeException`；
+  顺带给原有 error 字段检查加 `&& !choices` 守卫（防误杀同时带 error 提示的正常回答），并修 `chatStreaming` 格式串丢错误体
+- **关闭说明（证据分两层）**：正路径实测通过（minimax `595`、agnes 正常 200、7.8 Agent 回 `2`）；
+  **负路径（4xx→500）未获实况复测**——当日 NVIDIA 只慢不 429，探针全部客户端超时；修复分支是确定性代码，待自然触发时观察即可
+- **提交勘误**：`98482bd` 同时夹带 yml `base-url` 修复（#15），提交信息未体现——同 `2ffc420` 惯例以本条为准
 
 ### 🟠 P1：Agnes base-url 与 .env 不一致
 - yml 硬编码 `https://apihub.agnes-ai.com/v1/chat/completions` → 用该 key 报 `Invalid token`
@@ -100,7 +103,7 @@
 - **流式 tool_calls 组装崩溃**：碎片 `.toString()`→`asString()`、手工拼 JSON→结构化构建、参数非法降级 try/catch → `1549977` / `c249dd2`
 - **`Message` 缺蛇形字段映射 → 上游 400 → 静默空响应**：`toolCalls`/`toolCallId` 无 `@JsonProperty`，上游报 `missing field tool_call_id`；
   又因 `chatStreaming` 无状态码检查 + `data:` 行前缀过滤**双重静默**被吞成"成功空响应" → 坏历史在 SQLite 形成**自持环**（跨重启存活）→ `1549977`
-  - 姊妹问题：`chatStreaming` 状态码检查已补（`1549977`），**同步 `chat()` 仍缺——上方 P0 未关**
+  - 姊妹问题：`chatStreaming` 状态码检查已补（`1549977`），同步 `chat()` 已补（`98482bd`）——**上方 P0 已关**
 - **`ToolEngine` 参数双形状兼容**（`isTextual` 分支，字符串/对象都收）→ `c249dd2`
 - **流式 ReAct 最终回答不落盘**（同步 L154/L213 有、流式无 → 多轮失忆）→ `e13f529`
 - `extractThoughtAndStream` 单通道重写 → `3189ce1`；摘要链路传 model + fail-open → `ed6ac66`；CJK 左右边界 → `618210f` / `c249dd2`
@@ -134,6 +137,7 @@
     分级：**先实证**（一次 curl 看上游帧结构）；若实证踩雷 → 升 P1（计费数字）→ 阈值族
 11. 🟠 **P1** **T6 捆绑雷（06-01-PLAN 已记）** — `stream()` 经 `getEffectiveModel()` 的前缀处理在子类才做、直用基类处不剥；
     `ChatController` tools 恒传 null 与 `tool_choice=auto` 矛盾 → **T6 本体，做错即功能坏**
+    → ✅ 已处理（`b60cdee`：同步分支归一化守卫 + 前缀剥离经流式 E2E 实证；流式 tool_choice 残口另立 #13）
 12. 🟡 **P2** **`transitionToSilent`/`transitionTo` 同构双实现** — `ReActAgent:518-528` 与 `554-564` 各带一份 compute+try/catch+warn，
     仅差"是否 emit 事件" → sync/stream 双腿漂移温床，重构可合并（参数区分 emit）
 13. 🟡 **P2** **`stream()` 缺 `tool_choice` 通道** — `LLMService.stream()` 签名（T3 设计）只有 `tools`；adapter 内 L211 tools 非空即硬编码 `"auto"`，`ChatController` 流分支也无从传递 → 客户端流式请求的 `tool_choice`（`"none"`/指定函数/`"required"`）被静默覆盖为 auto。
@@ -142,6 +146,7 @@
     影响 = OpenAI 兼容承诺的缺口（标准 SDK/客户端常用对象形态强制函数）；修法 = 升 `JsonNode`/专用多态类型并贯通 `LLMService.chat` 签名。**T6 验证时新发现**
 15. 🟡 **P2** **OpenRouter base-url 写成裸字面量** — `application.yml:18` `base-url: OPENROUTER_BASE_URL=https://openrouter.ai/api/v1/chat/completions`（漏 `${}`，把 .env 赋值行粘进了 yml；`.env` 里也无此变量）→ adapter 拿到整串字面量做 baseUrl → 首个 openrouter 请求在 `URI.create` 处炸（响亮失败，非静默）。
     修法一行：`base-url: https://openrouter.ai/api/v1/chat/completions`。**随手笔**。**T7 验证时新发现**
+    → ✅ 已修（`98482bd` 夹带；同日白名单 `nemotron` → `minimax-m3.1-flash:free` 换入 `075f392`）
 16. 🟡 **P2** **客户端断开的处理链三处失真**（7.6 断开重验实证，三次尝试一致）——
     ① `BaseLLMAdapter:244-247` 的 `cancelled` 检查点 + `"Client disconnected"` 日志**实际不可达**：典型时序是 send 先对死客户端抛异常 → 异常路退出，轮不到下一迭代的检查点（三次断开零出现）→ **06-01-PLAN §7.6 的日志期望证伪**；释放功能靠异常路 + `try-with-resources(br)` 兜住（功能✓、日志✗）。
     ② 正常断开被记为 **ERROR** `Stream request failed`（18:15:22 实证）+ `Failed to deliver error frame` DEBUG —— 客户端关页 ≠ 服务端故障，**告警误分类**（#5 告警疲劳族）。

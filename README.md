@@ -118,10 +118,23 @@ return switch (prefix) {
 
 ## 当前支持的 Provider
 
-| Provider | 模型 | 非流式 | 流式 (SSE) |
-|----------|------|--------|------------|
-| **Nvidia** | `nvidia/deepseek-ai/deepseek-v4-flash` | ✅ | ⏳ 开发中 |
-| **OpenRouter** | `openrouter/owl-alpha` | ✅ | ⏳ 开发中 |
+| Provider       | 模型                                           | 非流式 | 流式 (SSE) |
+|----------------|----------------------------------------------|-----|----------|
+| **Nvidia**     | `nvidia/deepseek-ai/deepseek-v4.1-flash`     | ✅   | ✅        |
+| **Nvidia**     | `nvidia/stepfun-ai/step-5-preview`（原生推理）     | ✅   | ✅        |
+| **Nvidia**     | `nvidia/z-ai/glm-5.3-flash`                  | ✅   | ✅        |
+| **OpenRouter** | `openrouter/minimax/minimax-m3.1-flash:free` | ✅   | ✅        |
+| **Agnes**      | `agnes/agnes-3.0-flash`                      | ✅   | ✅        |
+
+
+### 端点边界职责
+
+| 端点 | 职责 | 是否执行 tool loop |
+|------|------|-------------------|
+| `POST /api/chat/completions` | 纯 LLM 转发，严格 OpenAI 兼容 | ❌ 只透传 `tools` 给模型 |
+| `POST /api/agent/chat` | Agent 同步对话 | ✅ SimpleAgent / ReActAgent |
+| `POST /api/agent/stream` | Agent 流式对话（StreamEvent） | ✅ |
+
 
 ---
 
@@ -153,13 +166,12 @@ mvn spring-boot:run
 ### 3. 发送你的第一个请求
 
 ```bash
-curl -X POST http://localhost:8080/api/chat/completions \
+curl -N -X POST http://localhost:8080/api/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "openrouter/owl-alpha",
-    "messages": [
-      {"role": "user", "content": "你好！"}
-    ]
+    "model": "openrouter/minimax/minimax-m3.1-flash:free",
+    "stream": true,
+    "messages": [{"role": "user", "content": "你好！"}]
   }'
 ```
 
@@ -236,10 +248,7 @@ JDK 11+ 内置，无需外部依赖。支持 HTTP/2、异步调用、流式响�
 - 工厂模式路由 + 多轮对话支持
 - 统一响应格式 (`ApiResult<T>`) + 全局异常处理
 - `.env` + `spring-dotenv` 密钥管理
-
-### 🚧 进行中
-
-- **SSE 流式响应** — 让 AI 回复逐字推送给客户端
+- SSE 流式响应（OpenAI `chat.completion.chunk` 帧 + usage 帧 + `[DONE]` 结束）
 
 ### 📋 规划
 
