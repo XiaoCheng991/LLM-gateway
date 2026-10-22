@@ -88,7 +88,7 @@ public class ReActAgent implements Agent {
     // 同步 React 循环
     private AgentResponse executeReactModeSync(List<Message> messages, AgentRequest request) throws Exception {
         String sessionId = request.getSessionId();
-        transitionToSilent(sessionId, AgentState.THINKING);
+        transitionTo(sessionId, AgentState.THINKING, null);
 
         List<ToolDefinition> tools = buildToolDefinitions();
         List<ToolCallRecord> toolHistory = new ArrayList<>();
@@ -112,7 +112,7 @@ public class ReActAgent implements Agent {
                 break;
             }
 
-            transitionToSilent(sessionId, AgentState.ACTING);
+            transitionTo(sessionId, AgentState.ACTING, null);
 
             // 追加 assistant 消息
             Message assistantMsg = new Message("assistant", response.getContent(), response.getToolCalls(), null, null);
@@ -136,16 +136,16 @@ public class ReActAgent implements Agent {
                 );
             }
 
-            transitionToSilent(sessionId, AgentState.THINKING);
+            transitionTo(sessionId, AgentState.THINKING, null);
             iterations++;
         }
 
         if (iterations >= MAX_ITERATIONS) {
             log.warn("ReAct 达到最大迭代次数 {}", MAX_ITERATIONS);
-            transitionToSilent(sessionId, AgentState.ERROR);
+            transitionTo(sessionId, AgentState.ERROR, null);
             finalContent = "已达到最大迭代次数限制：" + MAX_ITERATIONS + ", 已保留部分结果";
         } else {
-            transitionToSilent(sessionId, AgentState.DONE);
+            transitionTo(sessionId, AgentState.DONE, null);
         }
 
         // 将 ReAct 循环中新增的消息持久化到 session
@@ -167,7 +167,7 @@ public class ReActAgent implements Agent {
 
     private AgentResponse executePlanModeSync(List<Message> messages, AgentRequest request) throws Exception {
         String sessionId = request.getSessionId();
-        transitionToSilent(sessionId, AgentState.PLANNING);
+        transitionTo(sessionId, AgentState.PLANNING, null);
 
         // 1. 让 LLM 生成计划
         String planPrompt = "You need to complete a complex task. First, create a step-by-step plan. " +
@@ -212,7 +212,7 @@ public class ReActAgent implements Agent {
             finalContent.append(stepResp.getContent()).append("\n");
         }
 
-        transitionToSilent(sessionId, AgentState.DONE);
+        transitionTo(sessionId, AgentState.DONE, null);
         sessionManager.append(sessionId, new Message("assistant", finalContent.toString(), null, null, null));
 
         return AgentResponse.builder()
@@ -340,7 +340,7 @@ public class ReActAgent implements Agent {
         }
 
         if (iterations >= MAX_ITERATIONS) {
-            log.warn("ReAct 达到最大迭代次数 {}", MAX_ITERATIONS);
+            log.warn("ReAct 达到最大的迭代次数 {}", MAX_ITERATIONS);
 
             // 将循环中已累计的消息持久化到 session
             for (int i = initialSize; i < messages.size(); i++) {
@@ -515,23 +515,6 @@ public class ReActAgent implements Agent {
     }
 
     /**
-     * 同步状态转换（不发 SSE 事件，只更新 currentState）
-     */
-    private void transitionToSilent(String sessionId, AgentState next) {
-        // 避免并发请求同一 session 状态机死锁
-        sessionStates.compute(sessionId, (k, prev) -> {
-           if (prev == null) prev = AgentState.IDLE;
-           try {
-               prev.transitionTo(next);
-           } catch (IllegalStateException e) {
-               log.warn("非法状态转换: {} -> {}. 错误: {}", prev, next, e.getMessage());
-               return next;
-           }
-           return next;
-        });
-    }
-
-    /**
      * 清理 session 状态（session 清除时调用）
      */
     public void clearSessionState(String sessionId) {
@@ -565,8 +548,10 @@ public class ReActAgent implements Agent {
             }
             return next;
         });
-        emitter.accept(StreamEvent.state(next.name()));
-        log.debug("状态转换 -> {}", next);
+        if (emitter != null) {
+            emitter.accept(StreamEvent.state(next.name()));
+            log.debug("状态转换 -> {}", next);
+        }
     }
 
     /**
