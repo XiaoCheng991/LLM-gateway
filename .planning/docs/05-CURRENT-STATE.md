@@ -142,8 +142,12 @@
     仅差"是否 emit 事件" → sync/stream 双腿漂移温床，重构可合并（参数区分 emit）
 13. 🟡 **P2** **`stream()` 缺 `tool_choice` 通道** — `LLMService.stream()` 签名（T3 设计）只有 `tools`；adapter 内 L211 tools 非空即硬编码 `"auto"`，`ChatController` 流分支也无从传递 → 客户端流式请求的 `tool_choice`（`"none"`/指定函数/`"required"`）被静默覆盖为 auto。
     修法 = 扩签名（`LLMService`+`BaseLLMAdapter`+`ChatController`+`AgentController` 四处）→ 登记不扩 T6；同步分支已由 T6 归一化守卫覆盖。**T6 验证时新发现**
+    → ✅ 已修（`571f2a4`：`LLMService.stream` 加 `JsonNode` 三参 default 重载 + adapter `effectiveToolChoice` 透传 + 三处默认值改 `om.valueToTree("auto")` + `ChatController` 流分支接线；补笔 `60abdcd` 删旧 if 死代码——首笔落地后旧分支仍拦在前面使新调用不可达，教训："grep 命中 ≠ 控制流可达"，验收先走查控制流）
+    → **勘误 4**：上句修法"四处含 `AgentController`"系误报——`AgentController` 调的是 `agent.stream()`（`Agent` 接口），与 `LLMService.stream()` 无关，实为 `LLMService`/`BaseLLMAdapter`/`ChatController` 三文件
+    → **判别测**（2026-10-22 实测）：流式 + `tool_choice:"none"` + 强制工具措辞 → 92 帧零 `tool_calls`；同型对照仅 `tool_choice` 换对象形态 → `tool_calls` 在场——单变量差异归因透传真实生效
 14. 🟡 **P2** **`ChatRequest.toolChoice` 只支持字符串形态** — OpenAI 规范里 `tool_choice` 是联合类型（`"auto"/"none"/"required"` 字符串 **或** `{"type":"function","function":{"name":..}}` 对象）；`ChatRequest:39` 声明为 `String` → 客户端发对象形态 → Jackson 反序列化失败 → **500**（T6 补测实证：`Cannot deserialize String from START_OBJECT`）。
     影响 = OpenAI 兼容承诺的缺口（标准 SDK/客户端常用对象形态强制函数）；修法 = 升 `JsonNode`/专用多态类型并贯通 `LLMService.chat` 签名。**T6 验证时新发现**
+    → ✅ 已修（`571f2a4`：`ChatRequest.toolChoice` String→`JsonNode`——string|object 联合类型，网关忠实搬运、校验归上游；`LLMService.chat` 签名贯通）。实测同步对象形态 200 + `finishReason:tool_calls` + calculator 参数正确（修复前 500）
 15. 🟡 **P2** **OpenRouter base-url 写成裸字面量** — `application.yml:18` `base-url: OPENROUTER_BASE_URL=https://openrouter.ai/api/v1/chat/completions`（漏 `${}`，把 .env 赋值行粘进了 yml；`.env` 里也无此变量）→ adapter 拿到整串字面量做 baseUrl → 首个 openrouter 请求在 `URI.create` 处炸（响亮失败，非静默）。
     修法一行：`base-url: https://openrouter.ai/api/v1/chat/completions`。**随手笔**。**T7 验证时新发现**
     → ✅ 已修（`98482bd` 夹带；同日白名单 `nemotron` → `minimax-m3.1-flash:free` 换入 `075f392`）
@@ -162,6 +166,12 @@
 - **#7** compact 硬编码 secret → ✅ `6d6ed65`（@Value 注入 + `.env` `COMPACT_SECRET`；实测错值 401/真值 200；"上线前门禁"标签解除）
 - **#12** 迁移双实现 → ✅ `606109e`（合并单一 `transitionTo`，emitter 可空即静默）
 - **提交勘误 3**：`a9660b6`（fix[sse]）夹带 ReActAgent 的 PLAN 空计划守卫删除——实证无害（`getJsonNode` 内有重复守卫 + `@NonNull`，行为等价；null 时日志略糙），以本条为准；`2408a1d` 标题声明双主题同惯例。**"顺手夹带"已三振（`98482bd`/`13b12a8`/`a9660b6`），此后每笔提交前 diff 逐行对标题自查。**
+
+### ✅ 2026-10-22 批次销账：tool_choice 族全清（2 条）
+- **#13** `stream()` 缺 `tool_choice` 通道 → ✅ `571f2a4` + 补笔 `60abdcd`（死代码删除；详见 #13 条目）
+- **#14** `toolChoice` 只支持字符串 → ✅ `571f2a4`（详见 #14 条目）
+- **判别测五连全绿**（2026-10-22 实测）：① 流式 `"none"` + 强制工具措辞 → 92 帧零 `tool_calls`；② 同步对象形态 → 200 + `finishReason:tool_calls` + calculator 参数正确（修复前 500）；③ 流式对象形态 → `tool_calls` 5 处；④ 同步无 tools → 200 正常答；⑤ agent 冒烟 → `777*333` 工具轮闭环。①③构成单变量对照（仅 `tool_choice` 之差），证透传到上游真实生效
+- **勘误 4**：#13 原记修法"四处含 `AgentController`"系误报，实为三文件——详见 #13 条目
 
 **分级判据（M6 定案）**：P0 = 已实证发生 **且** 无声/伪装成功 **且** 打到钱或数据——新 14 条无一满足三条全齐，故无 P0；
 "高危未实证"（#1）与"已实证但可见有替代"（#2）均为 P1。
