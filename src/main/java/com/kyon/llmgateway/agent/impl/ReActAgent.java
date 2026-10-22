@@ -396,10 +396,6 @@ public class ReActAgent implements Agent {
         // 3. 解析计划 Json
         JsonNode planNode;
         try {
-            // 尝试提取 JSON 数据（LLM 可能包裹在 ```json```中）
-            if (planJson == null || planJson.isBlank()) {
-                throw new RuntimeException("计划 JSON 为空");
-            }
             planNode = getJsonNode(planJson);
         } catch (Exception e) {
             log.warn("计划 JSON 解析失败，回退到 REACT 模式: {}", e.getMessage());

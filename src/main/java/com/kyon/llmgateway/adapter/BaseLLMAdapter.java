@@ -277,17 +277,17 @@ public abstract class BaseLLMAdapter implements LLMService {
                             return;
                         }
 
-                        JsonNode choices = root.path("choices");
-                        if (!choices.isArray() || choices.isEmpty()) continue;
-                        JsonNode choice = choices.get(0);
-
-                        // 上游给真实 usage 就用真实值
+                        // 上游给真实 usage 就用真实值 -- 必先于 choices 判空
+                        // 规范允许独立 usage 帧(choices:[]), 先判空会把真实计费值跳过
                         JsonNode usageNode = root.path("usage");
                         if (!usageNode.isMissingNode() && !usageNode.isNull()) {
                             promptTokens = usageNode.path("prompt_tokens").asInt(promptTokens);
                             completionTokens = usageNode.path("completion_tokens").asInt(completionTokens);
-                            sawUsage = true;
                         }
+
+                        JsonNode choices = root.path("choices");
+                        if (!choices.isArray() || choices.isEmpty()) continue;
+                        JsonNode choice = choices.get(0);
 
                         JsonNode fr = choice.path("finish_reason");
                         if (!fr.isMissingNode() && !fr.isNull()) finishReason = fr.asString();
