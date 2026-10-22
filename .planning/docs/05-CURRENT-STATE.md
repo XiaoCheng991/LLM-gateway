@@ -122,6 +122,11 @@
    `chatStreaming` 只读 `delta.content`（约 L390）→ 原生推理模型（step-5）的思考/偶发答案全丢：无 thinking 事件、空回答（冒烟已实证）；
    `stream()` 透传不丢（`delta` 原样嵌入 L297）——**同一模型两条出口表现不一致**。
    分级：已实证但失败可见 + 有替代模型（deepseek 正常）→ 不够 P0 → **绑 T6**
+   → ✅ 已修（`e59ffdc`：`ChatResponse` 加 `reasoningContent` + `LLMService`/`chatStreaming` 加 `onReasoningDelta` 第五参 + `BaseLLMAdapter` 同步读 `reasoning_content`/`reasoning`（DeepSeek 原生名优先、OpenRouter 归一名兜底）+ 流式累计入最终响应 + 两 Agent 接 `StreamEvent.thinking`；补笔 `fdfdde8`——e59ffdc 誊抄走样把 content 行写成 `root.path("choices").asString()`（对**数组**调无参 asString → 每次同步必 500，#20 同族雷），补笔同笔含 5 内置工具参数读取补 `asString("")` 显式默认值加固）
+   → **行为证据**（2026-10-22 实测）：流式正例 minimax `event:thinking` **102 帧**（首帧即模型内心独白，修复前恒 0）；同步负例 agnes **200** + `reasoningContent:''` + content/model 回显完好（修复前同请求 500）；ReAct `mode:REACT` 状态序列回归 `THINKING→ACTING→THINKING→DONE`；日志窗口零 ERROR/WARN
+   → **待补验**：同步正例（真吐 reasoning 的模型打同步路、`data.reasoningContent` 非空）——环境三连击（minimax `:free` 2026-10-22 退役 404；NVIDIA 推理端点排队 >280s；OpenRouter 免费模型日限 50 次耗尽 429）。**低风险**：上游字段名/类型已被当日直连探针实证（`message.reasoning` 字符串），读取模式与已实证的流式路同构
+   → **注记**：`reasoningContent` 实为空串 `''` 非 null（`asString("")` 默认值语义），`ChatResponse` 注释"无推理模型为null"与行为有出入——注释级、功能等价，不返工
+   → **誊抄教训**：参考答案手抄两处走样（数组当对象读 → 全同步 500；`get(0)` 越界返 null 隐患）双双过编译——"编译器保类型，保不了本意"再实证；行为层判别测当场揪出 → 誊抄后与参考逐字符对照，或直接复制粘贴
 3. 🟠 **P1** **`estimateMessages` 漏 `tool_calls`** — `TokenCounter:35-39` 只数 `content+5/条`（**字段级**缺失，非字符级）。
    后果链：工具轮 assistant 的 content 近空而 tool_calls 很大 → 总量低估 → 触达 6 个下游：`ReActAgent:587`（85% 预警）、`ContextManager:41/61`（累计与截断阈值）、
    `BaseLLMAdapter:236/466`（两处请求侧估算 usage）、`AgentController:112/114`（compact 压缩比判断）→ 该截不截 → 上游超窗报错。
@@ -197,10 +202,16 @@
 - **SimpleAgent 双路行为覆盖补全**：此前仅编译级（编译器清扫），本轮同步（L73）/流式（L148）均获行为级证据
 - 收尾日志：新实例 49 行窗口零 ERROR / 零 WARN / 零 Stream 处理失败
 
+### ✅ 2026-10-22 深夜批次销账：#2 reasoning 通道（1 条）
+- **#2** `reasoning_content` 丢弃 → ✅ `e59ffdc` + 补笔 `fdfdde8`（证据链与誊抄教训详见 #2 条目；**同步正例待环境恢复补验**，不阻塞 #8/#9）
+- **判别指纹沉淀**：流式判别 = `event:thinking` 帧数（修复前恒 0，实测 102）；同步判别 = `data.reasoningContent` 在场 + content 非空；负对照 = 无 reasoning 字段的模型（agnes）零副作用
+- **环境事件三连**（2026-10-22 晚实录）：① OpenRouter `minimax/minimax-m3.1-flash:free` **退役**（404 实证"free launch period ended"）→ 白名单首条已死、快速测试模型需更换；② NVIDIA `integrate.api.nvidia.com` 主机通（1.3s 200）但推理端点排队 **>280s**（curl 退出码 28，历史 1-10s，判临时拥塞）；③ OpenRouter 免费模型**日限 50 次耗尽**（429 `free-models-per-day`，充值 10 刀解锁 1000 次/日）
+- **勘误 5**：`e59ffdc` 与 `fdfdde8` 标题均整句复制（含括号旁白与自查指令）；`fdfdde8` 实为"同步 content 修复 + 5 工具加固"两件事一笔且复用 reasoning 标题——已推送不重写，以 `fix(api): 修正同步 content 读取路径` + `fix(tool): 工具参数补 asString 默认值` 两条语义为准。**教训**：只取建议标题行、按本笔实际内容改写；两件事拆两笔
+
 **分级判据（M6 定案）**：P0 = 已实证发生 **且** 无声/伪装成功 **且** 打到钱或数据——新 14 条无一满足三条全齐，故无 P0；
 "高危未实证"（#1）与"已实证但可见有替代"（#2）均为 P1。
 
-**打包策略**：**T6 包** = #11 + #2 + #1 + #8 + #9（同一波签名/历史改动，全量 grep）→ 已清 #11（`b60cdee`）与 #1（本批），**残余 #2 + #8 + #9**；
+**打包策略**：**T6 包** = #11 + #2 + #1 + #8 + #9（同一波签名/历史改动，全量 grep）→ 已清 #11（`b60cdee`）、#1（竞态批）与 #2（深夜批），**残余 #8 + #9**；
 **阈值族** = #3 + #6 + #10（已清）；**随手笔** = #4、#5、#7、#12（已清），另挂 #16 + #17；
 **tool_choice 族** = #13 + #14（已清）。
 
@@ -214,10 +225,10 @@
 
 ## 三、下一步（顺序，2026-10-22 晚更新）
 
-1. **T6 包残余**：#2 `reasoning_content` 丢弃 → #8 `<thinking>` 进历史 → #9 PLAN 漂移（同波签名/历史改动，全量 grep）
+1. **T6 包残余**：#8 `<thinking>` 进历史 → #9 PLAN 漂移（同波签名/历史改动，全量 grep）；#2 同步正例补验挂环境恢复后（换白名单模型或 NVIDIA 排队恢复，见深夜批环境事件）
 2. **随手笔挂账**：#16 SSE 断开打磨包 + #17 同步 React 假 WARN
 3. **06-02 Eval 实施**（06-02-PLAN T1-T12 为工作手册；06-01-PLAN 遗留 T5-T8 届时核对）
 4. M7 复习考（定案：Eval 完工后当结业考）
-5. 顺手项：yml 模型列表清理（P1 模型数据过期；P0 状态码 `98482bd` 已修、Agnes 域名已核验销账 2026-10-22）
+5. **顺手项**：yml 模型列表清理（P1 模型数据过期；P0 状态码 `98482bd` 已修、Agnes 域名已核验销账 2026-10-22）——**`minimax-m3.1-flash:free` 已退役必换**（2026-10-22 环境事件，白名单首条现为死模型）；快速测试模型候选：OpenRouter nemotron 系免费推理模型（`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` 直连探针因日限 429 未及验证）或 NVIDIA 三杰（待排队恢复）
 
 > 旧清单"拆原子提交 / 整体复习 / 回 T4"三项已失效（2026-10-22 核验：工作区净；`stream()` 经多轮 SSE 判别测实证）。
