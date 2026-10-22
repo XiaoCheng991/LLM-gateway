@@ -310,6 +310,9 @@ public class ReActAgent implements Agent {
                 break;
             }
 
+            // 工具执行前进入 ACTING
+            transitionTo(sessionId, AgentState.ACTING, emitter);
+
             // 追加 assistant 消息
             Message assistantMsg = new Message("assistant", fullResponse,
                     response.getToolCalls(), null, null);

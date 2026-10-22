@@ -35,8 +35,10 @@ public enum AgentState {
             THINKING, Set.of(ACTING, DONE, ERROR),
             ACTING, Set.of(THINKING, DONE, ERROR),
             PLANNING, Set.of(THINKING, DONE, ERROR),
-            DONE, Set.of(IDLE),
-            ERROR, Set.of(IDLE)
+            // 终态重入：DONE/ERROR 是"请求之间"的驿站，不是 session 的终点——
+            // 新请求（含失败重试）从终态直接进新一轮
+            DONE, Set.of(IDLE, THINKING, PLANNING),
+            ERROR, Set.of(IDLE, THINKING, PLANNING)
     );
 
     /**
