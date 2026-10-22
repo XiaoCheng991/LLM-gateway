@@ -139,7 +139,7 @@ public abstract class BaseLLMAdapter implements LLMService {
         }
 
         log.info("Chat completed - model: {}, inputTokens: {}, outputTokens: {}, latency: {}ms",
-                model, inputTokens, outputTokens, latency);
+                respModel, inputTokens, outputTokens, latency);
 
         // 5. 扣减 Token (Http 成功后才口 token，重试场景节省配额)
         tokenBucketRateLimiter.recordSuccess(getProviderName());
