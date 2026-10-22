@@ -17,6 +17,7 @@ import jakarta.annotation.Resource;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -34,9 +35,11 @@ public class ReActAgent implements Agent {
     private static final ObjectMapper om = new ObjectMapper();
 
     private static final int MAX_ITERATIONS = 15;
-    private static final int DEFAULT_CONTEXT_WINDOW = 32000;
     private static final int MAX_THOUGHT_LENGTH = 2000;
     private static final double WARN_THRESHOLD = 0.85;
+
+    @Value("${llm.default-context-window}")
+    private int contextWindow = 32000;
 
     // thinking 标签常量
     private static final String OPEN_TAG = "<thinking>";
@@ -585,9 +588,9 @@ public class ReActAgent implements Agent {
      */
     private void checkTokenWarning(List<Message> messages) {
         int tokens = TokenCounter.estimateMessages(messages);
-        int warnTokens = (int) (DEFAULT_CONTEXT_WINDOW * WARN_THRESHOLD);
+        int warnTokens = (int) (contextWindow * WARN_THRESHOLD);
         if (tokens > warnTokens) {
-            log.warn("上下文 token 接近上限: {}/{} ({}%)", tokens, DEFAULT_CONTEXT_WINDOW, tokens*100/DEFAULT_CONTEXT_WINDOW);
+            log.warn("上下文 token 接近上限: {}/{} ({}%)", tokens, contextWindow, tokens*100/contextWindow);
         }
     }
 

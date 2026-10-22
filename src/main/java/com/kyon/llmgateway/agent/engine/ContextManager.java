@@ -6,6 +6,7 @@ import com.kyon.llmgateway.service.LLMService;
 import com.kyon.llmgateway.service.LLMServiceFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -23,7 +24,8 @@ public class ContextManager {
     private static final int MAX_MESSAGES = 20;
 
     // 压缩配置
-    private static final int DEFAULT_CONTEXT_WINDOW = 32000;
+    @Value("${llm.default-context-window}")
+    private int contextWindow;
     private static final double SUMMARIZE_THRESHOLD = 0.7;
 
     /** 按消息数量裁剪，保留第一条 + 最近 N-1 条 */
@@ -57,7 +59,7 @@ public class ContextManager {
      * 自动检测：token 超过 context window 70% 时出发摘要压缩
      */
     public List<Message> truncateToThreshold(List<Message> messages, String model, LLMServiceFactory factory) {
-        int threshold = (int) (DEFAULT_CONTEXT_WINDOW * SUMMARIZE_THRESHOLD);
+        int threshold = (int) (contextWindow * SUMMARIZE_THRESHOLD);
         if (TokenCounter.estimateMessages(messages) <= threshold) {
             return messages;
         }
