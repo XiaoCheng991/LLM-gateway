@@ -44,12 +44,6 @@ public class ChatController {
     public Object chat(@RequestBody ChatRequest request) throws Exception {
         LLMService service = llmServiceFactory.getLlmService(request.getModel());
 
-        // 流式：上游 SSE 由 stream() 转成 OpenAI chunk 格式
-        // 已知缺口：stream() 暂不收 tool_choice (tools 非空时内部固定 auto)
-        if (Boolean.TRUE.equals(request.getStream())) {
-            return service.stream(request.getMessages(), request.getTools());
-        }
-
         // 归一化：没有 tools 就不携带 tool_choice（否则上游 400）
         List<ToolDefinition> tools = request.getTools();
         JsonNode toolChoice = (tools == null || tools.isEmpty()) ? null : request.getToolChoice();
