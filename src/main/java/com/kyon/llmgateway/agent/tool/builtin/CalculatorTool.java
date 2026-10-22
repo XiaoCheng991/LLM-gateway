@@ -58,7 +58,7 @@ public class CalculatorTool implements Tool {
 
     @Override
     public String execute(JsonNode arguments) {
-        String expr = arguments.path("expression").asString();
+        String expr = arguments.path("expression").asString("");
 
         // 安全检查：只允许数字和运算符
         if (!expr.matches("[0-9+\\-*/().\\s]+")) {

@@ -61,7 +61,7 @@ public class WebFetchTool implements Tool {
 
     @Override
     public String execute(JsonNode arguments) {
-        String url = arguments.path("url").asString();
+        String url = arguments.path("url").asString("");
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             log.warn("Invalid URL: {}, 错误：URL 必须以 http:// 或 https:// 开头", url);
             return "错误：URL 必须以 http:// 或 https:// 开头";

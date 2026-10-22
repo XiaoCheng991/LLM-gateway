@@ -48,7 +48,7 @@ public class DateTimeTool implements Tool {
 
         // 参数检查
         if (arguments.has("format") && !arguments.path("format").isNull()) {
-            format = arguments.path("format").asString();
+            format = arguments.path("format").asString("");
         }
 
         try {

@@ -123,8 +123,8 @@ public abstract class BaseLLMAdapter implements LLMService {
                     .path("message").asString("unknown error"));
         }
 
-        JsonNode messageNode = root.path("choices").get(0).path("message");
-        String content = root.path("choices").asString();
+        JsonNode messageNode = root.path("choices").path(0).path("message");
+        String content = messageNode.path("content").asString("");
         // 思考内容：DeepSeek 原生风格 reasoning_content 优先，OpenRouter 归一化字段 reasoning 兜底
         String reasoning = messageNode.path("reasoning_content").asString("");
         if (reasoning.isEmpty()) reasoning = messageNode.path("reasoning").asString("");

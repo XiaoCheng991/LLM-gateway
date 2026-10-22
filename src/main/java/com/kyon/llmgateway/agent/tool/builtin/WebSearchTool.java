@@ -61,7 +61,7 @@ public class WebSearchTool implements Tool {
      */
     @Override
     public String execute(JsonNode arguments) {
-        String query = arguments.path("query").asString();
+        String query = arguments.path("query").asString("");
         int maxResults = arguments.has("max_results") ? arguments.path("max_results").asInt(5) : 5;
         if (maxResults > 10) maxResults = 10;
         if (maxResults < 1) maxResults = 1;

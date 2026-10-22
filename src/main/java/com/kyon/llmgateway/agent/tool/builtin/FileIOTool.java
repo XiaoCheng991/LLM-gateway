@@ -90,8 +90,8 @@ public class FileIOTool implements Tool {
 
     @Override
     public String execute(JsonNode arguments) throws IOException {
-        String action = arguments.path("action").asString();
-        String fileName = arguments.path("path").asString();
+        String action = arguments.path("action").asString("");
+        String fileName = arguments.path("path").asString("");
 
         // 第1层安全检查：文件名 字符黑名单（挡住 / \ .. 保证文件名字只有一层）
         if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
