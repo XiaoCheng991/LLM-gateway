@@ -123,8 +123,12 @@ public abstract class BaseLLMAdapter implements LLMService {
                     .path("message").asString("unknown error"));
         }
 
-        String content = root.path("choices").path(0)
-                .path("message").path("content").asString("");
+        JsonNode messageNode = root.path("choices").get(0).path("message");
+        String content = root.path("choices").asString();
+        // 思考内容：DeepSeek 原生风格 reasoning_content 优先，OpenRouter 归一化字段 reasoning 兜底
+        String reasoning = messageNode.path("reasoning_content").asString("");
+        if (reasoning.isEmpty()) reasoning = messageNode.path("reasoning").asString("");
+
         Integer inputTokens = root.path("usage").path("prompt_tokens").asInt(0);
         Integer outputTokens = root.path("usage").path("completion_tokens").asInt(0);
         String respModel = root.path("model").asString(model);
@@ -133,7 +137,7 @@ public abstract class BaseLLMAdapter implements LLMService {
 
         // 解析 tool_calls
         JsonNode toolCallsNode = null;
-        JsonNode messageNode = root.path("choices").path(0).path("message");
+
         if (messageNode.has("tool_calls") && !messageNode.path("tool_calls").isNull()) {
             toolCallsNode = messageNode.path("tool_calls");
         }
@@ -153,6 +157,7 @@ public abstract class BaseLLMAdapter implements LLMService {
                 .latency(latency)     // 单位：毫秒
                 .finishReason(finishReason)
                 .toolCalls(toolCallsNode) // 直接传递 tool_calls 的 JsonNode
+                .reasoningContent(reasoning)
                 .build();
     }
 
@@ -342,7 +347,8 @@ public abstract class BaseLLMAdapter implements LLMService {
      * @param onContentDelta 每个 content delta 的回调，推给前端
      * @return 完整的 ChatResponse（含 finishReason 和 toolCalls）
      */
-    public ChatResponse chatStreaming(String model, List<Message> messages, List<ToolDefinition> tools, Consumer<String> onContentDelta) throws Exception {
+    public ChatResponse chatStreaming(String model, List<Message> messages, List<ToolDefinition> tools,
+                                      Consumer<String> onContentDelta, Consumer<String> onReasoningDelta) throws Exception {
         String modelName = getEffectiveModel(model);
         log.debug("Streaming chat request -  model: {}, messages: {}", modelName, messages.size());
         // 注意：流式接口暂不进入限流
@@ -377,6 +383,7 @@ public abstract class BaseLLMAdapter implements LLMService {
         // 3. 逐行读，累计 content
         try (BufferedReader br = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
             StringBuilder fullContent = new StringBuilder();
+            StringBuilder fullReasoning = new StringBuilder();
 
             // 累计 tool_calls: key=index, value=拼接中的JSON
             Map<Integer, StringBuilder> toolCallArgs = new HashMap<>();
@@ -412,6 +419,16 @@ public abstract class BaseLLMAdapter implements LLMService {
                             fullContent.append(content);    // 存一份
                             onContentDelta.accept(content); // 通道 A：数据出口一（推给前端）
                         }
+                    }
+
+                    // 累计 reasoning（OpenRouter: delta.reasoning; DeepSeek原生：delta.reasoning_content）
+                    String reasoningPiece = delta.path("reasoning_content").asString("");
+                    if (reasoningPiece.isEmpty()) {
+                        reasoningPiece = delta.path("reasoning").asString("");
+                    }
+                    if (!reasoningPiece.isEmpty()) {
+                        fullReasoning.append(reasoningPiece);
+                        onReasoningDelta.accept(reasoningPiece); // 思考量推到前端
                     }
 
                     // 累计 tool_calls
@@ -485,6 +502,7 @@ public abstract class BaseLLMAdapter implements LLMService {
                     .latency(latency)
                     .finishReason(finishReason)
                     .toolCalls(toolCallsNode)
+                    .reasoningContent(fullReasoning.toString())
                     .build();
         } catch (Exception e) {
             log.error("Stream request failed - model: {}", modelName, e);

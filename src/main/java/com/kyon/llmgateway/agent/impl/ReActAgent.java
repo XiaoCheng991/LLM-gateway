@@ -318,7 +318,8 @@ public class ReActAgent implements Agent {
             LLMService service = llmServiceFactory.getLlmService(request.getModel());
             ChatResponse response = service.chatStreaming(
                     model, messages, tools,
-                    delta -> extractThoughtAndStream(delta, thoughtBuffer, inThought, emitter)
+                    delta -> extractThoughtAndStream(delta, thoughtBuffer, inThought, emitter),
+                    r -> emitter.accept(StreamEvent.thinking(r))
             );
             fullResponse = response != null ? response.getContent() : "";
 

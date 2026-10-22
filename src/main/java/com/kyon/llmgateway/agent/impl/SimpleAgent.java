@@ -153,7 +153,8 @@ public class SimpleAgent implements Agent {
                 // 用 chatStreaming 替代 chat，delta 通过StreamEvent 推出去
                 lastResponse = service.chatStreaming(
                         model, history, tools,
-                        delta -> emitter.accept(StreamEvent.content(delta))
+                        delta -> emitter.accept(StreamEvent.content(delta)),
+                        r -> emitter.accept(StreamEvent.thinking(r))
                 );
                 if (lastResponse == null || !lastResponse.hasToolCalls()) {
                     break;

@@ -40,7 +40,8 @@ public interface LLMService {
      * 默认抛异常，由 BaseLLMAdapter 覆盖实现
      */
     default ChatResponse chatStreaming(String model, List<Message> messages, List<ToolDefinition> tools,
-                                       Consumer<String> onContentDelta) throws Exception {
+                                       Consumer<String> onContentDelta,
+                                       Consumer<String> onReasoningDelta) throws Exception {
         throw new UnsupportedOperationException("流式 Tool Loop 未实现");
     }
 

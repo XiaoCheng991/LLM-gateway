@@ -13,6 +13,9 @@ public class ChatResponse {
     // AI 返回的文本内容
     private String content;
 
+    // 模型的思考过程（上游 message.reasoning / reasoning_content）,无推理模型为null
+    private String reasoningContent;
+
     // 实际使用的模型名
     private String model;
 
