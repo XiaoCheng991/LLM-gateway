@@ -14,9 +14,11 @@ import jakarta.annotation.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -37,6 +39,8 @@ public class SimpleAgent implements Agent {
     private ToolRegistry toolRegistry;              // 管理工具定义
     @Resource
     private SessionManager sessionManager;          // 管理对话历史
+
+    private static final ObjectMapper om = new ObjectMapper();
 
     @Override
     public AgentResponse chat(AgentRequest request) throws Exception {
@@ -156,7 +160,7 @@ public class SimpleAgent implements Agent {
                 }
 
                 // 推送 tool_call 事件
-                emitter.accept(StreamEvent.toolCall(lastResponse.getToolCalls().asString()));
+                emitter.accept(StreamEvent.toolCall(lastResponse.getToolCalls().toString()));
 
                 // 追加 assistant 消息
                 sessionManager.append(sessionId,
@@ -169,9 +173,8 @@ public class SimpleAgent implements Agent {
                             new Message("tool", r.getContent(), null, r.getToolCallId(), r.getToolName()));
 
                     // 推送 tool_result 事件
-                    emitter.accept(StreamEvent.toolResult(
-                            "{\"name\":\"%s\",\"result\":\"%s\"}".formatted(r.getToolName(), r.getContent())
-                    ));
+                    Map<String, String> toolResult = Map.of("name", r.getToolName(), "result", r.getContent());
+                    emitter.accept(StreamEvent.toolResult(om.writeValueAsString(toolResult)));
                 }
                 callCount++;
             }
