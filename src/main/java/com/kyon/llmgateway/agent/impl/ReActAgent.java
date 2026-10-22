@@ -96,6 +96,8 @@ public class ReActAgent implements Agent {
 
         int initialSize = messages.size();
         int iterations = 0;
+        int totalInputTokens = 0;
+        int totalOutputTokens = 0;
 
         while (iterations < MAX_ITERATIONS) {
             checkTokenWarning(messages);
@@ -103,6 +105,11 @@ public class ReActAgent implements Agent {
             // 重点：调用 chat() 方法
             LLMService service = llmServiceFactory.getLlmService(request.getModel());
             ChatResponse response = service.chat(messages, tools);
+            if (response != null) {
+                // 多轮工具循环每轮都是一次真实上游调用：用量跨轮累计
+                totalInputTokens += response.getInputTokens() != null ? response.getInputTokens() : 0;
+                totalOutputTokens += response.getOutputTokens() != null ? response.getOutputTokens() : 0;
+            }
 
             // 出口
             if (response == null || !response.hasToolCalls()) {
@@ -160,8 +167,8 @@ public class ReActAgent implements Agent {
                 .content(finalContent)
                 .sessionId(sessionId)
                 .toolHistory(toolHistory)
-                .inputTokens(0)
-                .outputTokens(0)
+                .inputTokens(totalInputTokens)
+                .outputTokens(totalOutputTokens)
                 .build();
     }
 
@@ -197,6 +204,10 @@ public class ReActAgent implements Agent {
         // 3. 逐步执行（D-10: 每步一个完整 ReAct 子循环）
         List<ToolCallRecord> allHistory = new ArrayList<>();
         StringBuilder finalContent = new StringBuilder();
+        // 计划生成调用本身也是真实上游调用，一并计入
+        int totalInputTokens = planResponse.getInputTokens() != null ? planResponse.getInputTokens() : 0;
+        int totalOutputTokens = planResponse.getOutputTokens() != null ? planResponse.getOutputTokens() : 0;
+
         for (JsonNode step : planNode) {
             String desc = step.path("description").asString("");
             if (desc.isBlank()) continue;
@@ -207,6 +218,9 @@ public class ReActAgent implements Agent {
             // 每个子步骤用独立的消息副本，互不干扰
             List<Message> stepMessages = new ArrayList<>(messages);
             AgentResponse stepResp = executeReactModeSync(stepMessages, sub);
+            // 子循环的用量并入总计（AgentResponse 是 int 原始类型，无需判空）
+            totalInputTokens += stepResp.getInputTokens();
+            totalOutputTokens += stepResp.getOutputTokens();
 
             allHistory.addAll(stepResp.getToolHistory());
             finalContent.append(stepResp.getContent()).append("\n");
@@ -219,8 +233,8 @@ public class ReActAgent implements Agent {
                 .content(finalContent.toString())
                 .sessionId(sessionId)
                 .toolHistory(allHistory)
-                .inputTokens(0)
-                .outputTokens(0)
+                .inputTokens(totalInputTokens)
+                .outputTokens(totalOutputTokens)
                 .build();
     }
 
