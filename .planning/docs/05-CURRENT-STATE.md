@@ -47,8 +47,10 @@
   **负路径（4xx→500）未获实况复测**——当日 NVIDIA 只慢不 429，探针全部客户端超时；修复分支是确定性代码，待自然触发时观察即可
 - **提交勘误**：`98482bd` 同时夹带 yml `base-url` 修复（#15），提交信息未体现——同 `2ffc420` 惯例以本条为准
 
-### 🟠 P1：Agnes base-url 与 .env 不一致
-- yml 硬编码 `https://apihub.agnes-ai.com/v1/chat/completions` → 用该 key 报 `Invalid token`
+### ✅ P1 已过时（2026-10-22 核验销账）：Agnes base-url 与 .env 不一致
+- **现况**：yml L14 已是 `https://api.agnes-ai.cn/v1/chat/completions`（域名与 `.env` 一致、`/chat/completions` 后缀已补），模型换 `agnes/agnes-3.0-flash`；2026-10-22 经网关实测 200（`content:"ok"`），P0 关闭说明亦留有 agnes 200 记录——下述原记录全行过时，留档防重复排查
+- **残留事实（不再单挂 P1）**：yml 三个 `base-url` 均硬编码字面量、不引用 `*_BASE_URL`——值已正确，引用化归"环境约定"节的配置清理后续项
+- yml 硬编码 `https://apihub.agnes-ai.com/v1/chat/completions` → 用该 key 报 `Invalid token`（原记录）
 - `.env` 里 `AGNES_BASE_URL=https://api.agnes-ai.cn/v1`，**yml 完全没引用**（`*_BASE_URL` 三个都没引用）
 - 实测用 `.env` 的 URL 直连：鉴权**通过**（错误变成 `model_not_found` 而非 token 错）
 - 即：key 没问题，是 yml 指错了域名；但 yml 的 URL 还要补 `/chat/completions` 后缀
@@ -156,6 +158,9 @@
     ② 正常断开被记为 **ERROR** `Stream request failed`（18:15:22 实证）+ `Failed to deliver error frame` DEBUG —— 客户端关页 ≠ 服务端故障，**告警误分类**（#5 告警疲劳族）。
     ③ 异常进 `GlobalExceptionHandler` → `No converter for ApiResult with preset Content-Type 'text/event-stream'` 双故障只剩 WARN（17:19:43 与 18:15:22 两次实证）——推理待证：客户端在线时同路可能挂到超时（fail-silent 亲缘）。
     修法归 SSE 打磨包：断开走 INFO/DEBUG + 检查点改为 send 失败即置位，SSE 上下文让 JSON handler 短路。**随手笔**。**T7 验证时新发现**
+17. 🟡 **P2** **同步 React 路异常后 session 状态残留 → 假 WARN** — `executeReactModeSync` 入口 `ReActAgent:91` 置 THINKING 后，循环内异常（如 `L106` `getLlmService(null)` 抛 `IllegalArgumentException`）无 catch/finally 兜底、直穿全局处理器回 400，session 状态停在 THINKING；下个同 session 请求入口再置 THINKING → 空打 `非法状态转换: THINKING -> THINKING`（`transitionTo` 在 warn 后 `return next` 强行置目标态，功能无损）
+    实证（2026-10-22 冒烟自伤）：14:36:34 失败请求（缺 model）留脏态 → 14:36:57 成功请求报 WARN；历史同款 26 次（13:22-13:45）证既有现象非本次回归。排障盲区：同步路成功转换静默（`transitionTo` 的 debug 日志挂在 `emitter != null` 下），脏态零痕迹只能靠 WARN 反推
+    分级：仅告警噪音（#5 告警疲劳族亲缘）→ 修法：React 同步路异常兜底 transition ERROR（或入口放行 THINKING 自指）→ **随手笔**
 
 ### ✅ 2026-10-22 批次销账：阈值族 + 随手笔全清（7 条）
 - **#3** estimateMessages 漏 tool_calls → ✅ `71547e2`（`estimateMessage` 统一口径；ContextManager:53 第 7 现场同批修复）
@@ -195,4 +200,4 @@
 3. **回 T4**：验证重写后的 `stream()`（注意：当前无 HTTP 入口，
    需 T6 接线后才能 curl 实测，或临时用 jshell/测试端点验证格式）
 4. T5-T8 SSE 收尾 → 06-02 Eval
-5. 顺手项：P0 状态码 bug、yml 模型列表清理、Agnes 域名对齐
+5. 顺手项：yml 模型列表清理（P0 状态码 `98482bd` 已修、Agnes 域名对齐已核验销账 2026-10-22）
