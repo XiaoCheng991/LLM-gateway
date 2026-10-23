@@ -37,7 +37,7 @@ public final class ThoughtTags {
         cleaned = cleaned.replace(CLOSE, "");
         // 返回 OPEN 标签前面的内容
         int strayOpen = cleaned.indexOf(OPEN);
-        if (strayOpen > 0) {
+        if (strayOpen >= 0) {
             cleaned = cleaned.substring(0, strayOpen);
         }
         return cleaned;
