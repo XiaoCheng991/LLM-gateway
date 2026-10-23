@@ -78,10 +78,19 @@ public class ReActAgent implements Agent {
 
         // 同步 ReAct 循环
         AgentResponse response;
-        if (request.getMode() == AgentMode.PLAN_EXECUTE) {
-            response = executePlanModeSync(messages, request);
-        } else {
-            response = executeReactModeSync(messages, request);
+        try {
+            if (request.getMode() == AgentMode.PLAN_EXECUTE) {
+                response = executePlanModeSync(messages, request);
+            } else {
+                response = executeReactModeSync(messages, request);
+            }
+        } catch (Exception e) {
+            // 异常兜底归位 ERROR，不留 THINKING/PLANNING脏态
+            AgentState cur = sessionStates.getOrDefault(sessionId, AgentState.IDLE);
+            if (cur == AgentState.THINKING || cur == AgentState.PLANNING || cur == AgentState.ACTING) {
+                transitionTo(sessionId, AgentState.ERROR, null);
+            }
+            throw e;
         }
         return response;
     }
@@ -231,7 +240,7 @@ public class ReActAgent implements Agent {
         }
 
         // 计划级拼接结果不再重复落盘，每个子步骤的回答已由自循环各自持久化
-        transitionTo(sessionId, AgentState.DONE, null);
+        finishPlan(sessionId, null);
 
         return AgentResponse.builder()
                 .content(finalContent.toString())
@@ -249,6 +258,14 @@ public class ReActAgent implements Agent {
     private JsonNode getJsonNode(String planJson) {
         JsonNode planNode;
         String cleaned = planJson.replace("```json", "").replace("```", "").trim();
+
+        // 截取首个 '[' 到末个 ']': indexOf 三态 -- start >= 0 才存在，-1 不存在
+        // end > start 保证子串合法，挡住 ] 在 [ 前的错误输入，不行再交给 readTree 报错回退
+        int start = cleaned.indexOf('[');
+        int end = cleaned.lastIndexOf(']');
+        if (start >= 0 && end > start) {
+            cleaned = cleaned.substring(start, end + 1);
+        }
         if (cleaned.isBlank()) {
             throw new RuntimeException("清理后的计划 JSON 为空");
         }
@@ -439,7 +456,7 @@ public class ReActAgent implements Agent {
             executeReactMode(stepMessages, subRequest, emitter);
         }
 
-        transitionTo(sessionId, AgentState.DONE, emitter);
+        finishPlan(sessionId, emitter);
         emitter.accept(StreamEvent.done());
     }
 
@@ -563,6 +580,17 @@ public class ReActAgent implements Agent {
         if (emitter != null) {
             emitter.accept(StreamEvent.state(next.name()));
             log.debug("状态转换 -> {}", next);
+        }
+    }
+
+    /**
+     * 计划收尾转态：子循环结束时已各自转过 DONE
+     * 仅当处于 PLANNING 时才补转，避免 DONE -> DONE 假告警
+     */
+    private void finishPlan(String sessionId, Consumer<StreamEvent> emitter) {
+        AgentState current = sessionStates.getOrDefault(sessionId, AgentState.IDLE);
+        if (current == AgentState.PLANNING) {
+            transitionTo(sessionId, AgentState.DONE, emitter);
         }
     }
 
