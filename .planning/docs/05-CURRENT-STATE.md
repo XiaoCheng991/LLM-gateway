@@ -174,9 +174,21 @@
     ② 正常断开被记为 **ERROR** `Stream request failed`（18:15:22 实证）+ `Failed to deliver error frame` DEBUG —— 客户端关页 ≠ 服务端故障，**告警误分类**（#5 告警疲劳族）。
     ③ 异常进 `GlobalExceptionHandler` → `No converter for ApiResult with preset Content-Type 'text/event-stream'` 双故障只剩 WARN（17:19:43 与 18:15:22 两次实证）——推理待证：客户端在线时同路可能挂到超时（fail-silent 亲缘）。
     修法归 SSE 打磨包：断开走 INFO/DEBUG + 检查点改为 send 失败即置位，SSE 上下文让 JSON handler 短路。**随手笔**。**T7 验证时新发现**
+    → 🟡 **部分达成，待收口**（2026-10-23 首轮三处改动后实测）：
+       - ① **已达成**：`BaseLLMAdapter` catch 块改判 `cancelled.get() || isClientDisconnect(e)` → 断连打 `INFO Client disconnected, closing upstream`（检查点**首次现身**，旧码三次断开零出现）且**不再**记 `ERROR Stream request failed`；`isClientDisconnect` 只认 Tomcat `ClientAbortException` 与 Spring `AsyncRequestNotUsableException` 两个**客户端侧专属**类型，不拿笼统 `IOException` 兜，免吞真实上游故障
+       - ③ **已达成**：`GlobalExceptionHandler` 按**响应** Content-Type 判 SSE → 短路 JSON 回写，`No converter for ApiResult` **零出现**（改前 10-22 两次实证）
+       - ② **未净**：`AgentController.sendEvent` 用了 `completeWithError(e)`（应为 `complete()`）→ ① 断开仍触发异常再派发，全局处理器落 **1 条 WARN**（18:17:10.312）；② emitter 转 error 态后，后续每次 send 抛 `IllegalStateException("ResponseBodyEmitter has already completed with error: ...")`，其 message **逐层嵌套**上一轮异常 → 单次断开刷 **30+ 条 DEBUG、每条约 2KB**（套娃日志）
+       - ②b 容器侧通知（`Servlet container error notification for disconnected client`）独立于业务代码，仍会进全局处理器 → 须在处理器内把"客户端断开类"降为 DEBUG
+       - **实测口径**：A 路（`/api/agent/stream` 断开）零 ERROR、零 `No converter`、1 WARN + 30+ 套娃 DEBUG；B 路（`/api/chat/completions?stream=true` 断开）1 INFO + 1 WARN、零 ERROR；C 路（正常流回归）`1 content + 1 done + 2 state`、零 ERROR —— **功能目标达成，告警噪音待收口**
+       - → ✅ **已清**（收口三改：`AgentController.sendEvent` 的 `completeWithError` → `complete()` + `disconnected` 断开标记（首次失败记一次、后续静默丢弃）+ 日志取**根因**（`rootMessage`）；`GlobalExceptionHandler` 客户端断开类降 DEBUG + `ClientAbortException` 拼误修正）
+       - **收口后实证**（2026-10-23 19:00，自适应探针：首帧一到即 kill，必落流中）：A 路 **1 条** DEBUG `SSE 推送失败（客户端断开），停止推送：IOException: Broken pipe`（单行 **160 字符**，修复前 30+ 条 × 2KB 套娃）；B 路 **1 条** INFO `Client disconnected, closing upstream`（检查点首次现身）；全局处理器 **2 条 DEBUG**（原 WARN）——**整窗 ERROR=0、WARN=0、`No converter`=0、`Stream 处理失败`=0**
+       - **探针教训（重要）**：首轮收口后复测「零相关行」，非代码失效而是**探针失效**——定时 kill（12s/15s）撞上 agnes 响应过快，**流早已送完**，断开根本没发生；改「首帧一到即杀」方得有效样本。**"零告警不是通过的 0"：须先证"事件确曾发生"（首帧到达 + 客户端输出被截断），再论"日志是否干净"**
+       - **日志形态教训**：异常 message 在 SSE 场景会**逐层嵌套**（`ResponseBodyEmitter has already completed with error: <上一轮 message>`），逐层套娃致单次断开刷 30+ 条 2KB 日志 → 记日志须取**根因**（`rootMessage`），且**首次失败记一次即止**（断开标记）
 17. 🟡 **P2** **同步 React 路异常后 session 状态残留 → 假 WARN** — `executeReactModeSync` 入口 `ReActAgent:91` 置 THINKING 后，循环内异常（如 `L106` `getLlmService(null)` 抛 `IllegalArgumentException`）无 catch/finally 兜底、直穿全局处理器回 400，session 状态停在 THINKING；下个同 session 请求入口再置 THINKING → 空打 `非法状态转换: THINKING -> THINKING`（`transitionTo` 在 warn 后 `return next` 强行置目标态，功能无损）
     实证（2026-10-22 冒烟自伤）：14:36:34 失败请求（缺 model）留脏态 → 14:36:57 成功请求报 WARN；历史同款 26 次（13:22-13:45）证既有现象非本次回归。排障盲区：同步路成功转换静默（`transitionTo` 的 debug 日志挂在 `emitter != null` 下），脏态零痕迹只能靠 WARN 反推
     分级：仅告警噪音（#5 告警疲劳族亲缘）→ 修法：React 同步路异常兜底 transition ERROR（或入口放行 THINKING 自指）→ **随手笔**
+   → ✅ 已修（`7fb0787`：`chat()` 分发段 try/catch 兜底——异常时若当前态 ∈ {THINKING,PLANNING,ACTING} 则归位 ERROR 再 rethrow；**终态之后不重复转**避免造新假告警；异常照旧穿透全局处理器回 4xx，功能不变）
+   → **行为证据**（2026-10-23 实测）：修复前基线 15:55 缺 model 400 → 同 session 下一请求空打 `THINKING -> THINKING`；修复后同型复放（400 + 200「收到」）窗口零 WARN/ERROR
 18. 🟡 **P2** **compact `compressionRatio` 运算符优先级错位** — `AgentController:129` `1.0 - (double) compressedTokens / originalTokens * 100`：`*` 与 `/` 同优先级左结合，乘 100 先跟了除法 → 算成 `1−37.3` 显示 **`-36.3%`**（真实压缩 62.7%）；纯显示层错数，压缩功能本身正常。修 = 括号整体乘 100。**2026-10-22 #1 收尾验证时新发现**
     → ✅ 已修（`445f54d`）。复验 compact 返回 `54.0%`（2291→1055 token）正数 ✓
 19. 🟡 **P2** **SimpleAgent 经 HTTP 不可达** — `AgentRequest:31-33` 自定义 getter `mode != null ? mode : REACT` 把显式 `"mode":null` 兜底回 REACT → 控制器两分支（chat L67 / stream L88）判 `getMode() != null` **恒真** → else 分支成**死代码**，而流式分支 javadoc 明写 "mode=react|plan_execute → ReAct，其他/null → SimpleAgent（向后兼容）"——设计与实现背离；前序对话"显式 `mode:null` 即达 SimpleAgent"的结论系漏读该 getter 的误判，以本条为准。
@@ -187,8 +199,12 @@
     → ✅ 已修（`211e315`：`toString()` 对齐 ReActAgent L339 + `Map.of`/`writeValueAsString` 对齐 L350-351）。复验：35 帧、零 error 事件、尾部 `event:done`、两工具调用全执行；编译告警仅 ToolEngine 既存 deprecation 一条
 21. 🟡 **P2** **PLAN 收尾 `DONE -> DONE` 假 WARN** — 每个子步骤结束时子循环各自 `transitionTo(DONE)`，计划层收尾再转 DONE 被状态机拒（白名单 DONE 只许回 IDLE/THINKING/PLANNING）→ warn 后 `return next` 强行置位，功能无损纯噪声。同步/流式**双路同病**（非漂移，属状态机与 PLAN 收尾的结构性错拍）。**2026-10-23 #9 验证实证**（15:32、15:35、15:36 三次均随 PLAN 完成出现），修复前基线 13:43 亦有 → 既有现象非 #9 回归
    分级：无功能影响、每次 PLAN 必刷 → 告警疲劳族（#5/#17 亲缘，可同批）→ 修法方向：计划层收尾前判当前态已是 DONE 则跳过（或状态机允许 DONE→DONE 自指幂等）→ **随手笔**
+   → ✅ 已修（`7fb0787`：新增单一出处助手 `finishPlan`——子循环已各自转 DONE，**仅当前态为 PLANNING（0 步计划）时才补转**，同步/流式同调；ERROR 终态保留不抹）
+   → **行为证据**（2026-10-23 实测）：修复前基线同日三条 `DONE -> DONE`；修复后同步+流式 PLAN 双双**零该 WARN**且计划真执行（同步 1+1=2 / 2+2=4 两步互斥、流式 `event:plan` 在场 + 步骤内容），流式状态序列 `PLANNING→THINKING→DONE→THINKING→DONE`（5 帧，重复尾帧消除 = 跳过的那个假转换）
 22. 🟡 **P2** **`getJsonNode` 不容忍前缀散文 → 计划解析脆弱** — 只剥 ```` ``` ```` 围栏（`replace("```json","")`/`replace("```","")`），不容忍 "计划 JSON："/"计划如下：" 等前缀文字 → `om.readTree(cleaned)` 抛 `Unrecognized token` → 计划解析失败回退 REACT。**#9 D7 探针实证**（修复前同步侧此失败**完全静默**、无任何日志；`a223de2` 补 warn 后可观测，但解析本身的脆弱性未动）
    分级：已实证每次散文前缀必炸 × 失败**可见**（回退 REACT 仍有输出、现已有 warn）× 有替代（回退路径）→ P2。修法方向：截取首个 `[` 到末个 `]` 的子串再 readTree，或提示词加"禁止任何其他文字"双保险 → **随手笔**（与 D7 修复区分：#9 只解决"静默"，本条解决"脆弱"）
+   → ✅ 已修（`7fb0787`：`getJsonNode` 剥围栏后截取首个 `[` 到末个 `]`——`start >= 0 && end > start` 三态守卫（`indexOf` 方法论沿用），截不到交由 readTree 报错走回退）
+   → **行为证据**（2026-10-23 实测）：jshell 对真实编译类 **8 规则矩阵全绿**——纯 JSON/围栏/前缀散文/前后缀散文全 OK（前两防回归、后两为修复目标），无括号/`]`在`[`前/空串/非数组全 THROW（回退路径保留）；行为探针重放"计划如下："前缀消息从修复前必回退改为**直接进步骤执行**、零解析失败 WARN
 
 ### ✅ 2026-10-22 批次销账：阈值族 + 随手笔全清（7 条）
 - **#3** estimateMessages 漏 tool_calls → ✅ `71547e2`（`estimateMessage` 统一口径；ContextManager:53 第 7 现场同批修复）
@@ -233,11 +249,17 @@
 - **升级判例**：登记时 P2（"顺手对齐"），侦察实锤 B1（功能空转+无声）→ **P1**——"登记外新发现可改写条目级别"，台账不是只进不出
 - **T6 包全清**（#11→#1→#2→#8→#9 全部销账）；验证中附带登记 #21、#22 两条随手笔
 
+### ✅ 2026-10-23 批次销账：状态机假告警 + 计划解析容错（3 条，#17/#21/#22）
+- **#17** 同步 React 异常脏态假 WARN + **#21** PLAN 收尾 `DONE -> DONE` + **#22** `getJsonNode` 前缀散文 → ✅ `7fb0787`（三修合一，同一文件）
+- **修法口径**：延续既有单一出处—#21 提助手 `finishPlan` 双路同调、#22 沿用 `indexOf` 三态方法论；#17/#21 属"**假转换改调用方**"（#5 定下的口径）——状态机白名单不动，让调用方不发假转换（DONE→DONE 是重复收尾、THINKING→THINKING 是脏态残留，都是假转换）
+- **判别姿势沉淀**：**基线先行**——改码前趁旧进程抓修复前 WARN 实证（#17 `THINKING->THINKING`、#21 三条 `DONE->DONE`、#22 probe4 回退），改后同型复放对拍（对照组不是想象出来的，是当场录的）；**纯函数用 jshell 矩阵**（#22 八规则）验边界；**结构帧计数**验跳帧（流式 state 帧 6→5）——"零 WARN 不是通过的 0"，必须同时确认功能未吞（200 + 内容正确 + 计划真执行）
+- **随手笔仅剩 #16**（SSE 断开打磨包，跨 `BaseLLMAdapter` + `GlobalExceptionHandler`）
+
 **分级判据（M6 定案）**：P0 = 已实证发生 **且** 无声/伪装成功 **且** 打到钱或数据——新 14 条无一满足三条全齐，故无 P0；
 "高危未实证"（#1）与"已实证但可见有替代"（#2）均为 P1。
 
 **打包策略**：**T6 包** = #11 + #2 + #1 + #8 + #9（同一波签名/历史改动，全量 grep）→ **全清**（#11 `b60cdee`、#1 竞态批、#2 深夜批、#8 10-23 批、#9 `a223de2`）；
-**阈值族** = #3 + #6 + #10（已清）；**随手笔** = #4、#5、#7、#12（已清），另挂 #16 + #17 + #21 + #22；
+**阈值族** = #3 + #6 + #10（已清）；**随手笔** = #4、#5、#7、#12（已清）；另挂 #17 + #21 + #22（已清 `7fb0787`）+ #16（已清）——**随手笔全清**；
 **tool_choice 族** = #13 + #14（已清）。
 
 ### 🗂 事故模式档案（2026-10-20）
@@ -250,9 +272,8 @@
 
 ## 三、下一步（顺序，2026-10-23 更新）
 
-1. **随手笔挂账**：#16 SSE 断开打磨包 + #17 同步 React 假 WARN + #21 PLAN 收尾假 WARN（#17/#21 亲缘可同批）+ #22 getJsonNode 前缀散文容忍（T6 包已随 `a223de2` 全清，#2 同步正例补验挂环境恢复：换白名单模型或 NVIDIA 排队恢复，见深夜批环境事件）
-2. **06-02 Eval 实施**（06-02-PLAN T1-T12 为工作手册；06-01-PLAN 遗留 T5-T8 届时核对）
-3. M7 复习考（定案：Eval 完工后当结业考）
-4. **顺手项**：yml 模型列表清理（P1 模型数据过期；P0 状态码 `98482bd` 已修、Agnes 域名已核验销账 2026-10-22）——**`minimax-m3.1-flash:free` 已退役必换**（2026-10-22 环境事件，白名单首条现为死模型）；三选待定夺：A. OpenRouter nemotron 系免费推理模型（`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` 直连探针因日限 429 未及验证）/ B. NVIDIA 三杰（deepseek-v4.1-flash、glm-5.3-flash，待排队恢复）/ C. minimax 付费版（$0.15/M）——不阻塞 Eval
+1. **06-02 Eval 实施**（06-02-PLAN T1-T12 为工作手册；06-01-PLAN 遗留 T5-T8 届时核对）——**随手笔全清后正式进**；#2 同步正例补验挂环境恢复（换白名单模型或 NVIDIA 排队恢复，见深夜批环境事件）
+2. M7 复习考（定案：Eval 完工后当结业考）
+3. **顺手项**：yml 模型列表清理（P1 模型数据过期；P0 状态码 `98482bd` 已修、Agnes 域名已核验销账 2026-10-22）——**`minimax-m3.1-flash:free` 已退役必换**（2026-10-22 环境事件，白名单首条现为死模型）；三选待定夺：A. OpenRouter nemotron 系免费推理模型（`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` 直连探针因日限 429 未及验证）/ B. NVIDIA 三杰（deepseek-v4.1-flash、glm-5.3-flash，待排队恢复）/ C. minimax 付费版（$0.15/M）——不阻塞 Eval
 
 > 旧清单"拆原子提交 / 整体复习 / 回 T4"三项已失效（2026-10-22 核验：工作区净；`stream()` 经多轮 SSE 判别测实证）。
