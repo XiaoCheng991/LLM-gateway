@@ -325,13 +325,18 @@ public abstract class BaseLLMAdapter implements LLMService {
                 emitter.complete();
 
             } catch (Exception e) {
+                // 客户端断开属于正常收尾 -- 不记 ERROR、不回推错误帧（响应已断）
+                if (cancelled.get() || isClientDisconnect(e)) {
+                    log.info("Client disconnected, closing upstream - model: {}", modelName);
+                    return;
+                }
+
                 log.error("Stream request failed - model: {}", modelName, e);
                 try {
                     emitter.send(SseEmitter.event().data(errorChunk(chunkId, modelName, created, e.getMessage())));
                     emitter.send(SseEmitter.event().data("[DONE]"));
                     emitter.complete();
                 } catch (Exception ignore) {
-                    log.debug("Failed to deliver error frame", ignore);
                 }
             }
         });
@@ -565,4 +570,21 @@ public abstract class BaseLLMAdapter implements LLMService {
             return "{\"error\":{\"message\":\"serialization failed\"}}";
         }
     }
+
+    /**
+     * 判定异常是否源于客户端主动断开连接
+     * Tomcat 抛 ClientAbortException、Spring 抛 AsyncRequestNotUsableException --
+     * 二者是客户端侧专属条件；刻意不匹配笼统 IOException，避免把上游读取故障误吞。
+     */
+    private boolean isClientDisconnect(Throwable e) {
+        for (Throwable t = e; t != null; t = (t == t.getCause() ? null : t.getCause())) {
+            String name = t.getClass().getName();
+            if (name.endsWith("ClientAbortException") || name.endsWith("AsyncRequestNotUsableException")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
 }

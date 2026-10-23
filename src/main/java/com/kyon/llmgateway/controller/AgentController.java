@@ -27,8 +27,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Agent 原生接口
@@ -81,19 +83,30 @@ public class AgentController {
     @ResponseBody
     public SseEmitter stream(@RequestBody AgentRequest request) {
         SseEmitter emitter = new SseEmitter(300_000L); // 5分钟超时
+        // 客户端断开标记：首次断开后不再推送、不再重复记日志
+        AtomicBoolean disconnected = new AtomicBoolean(false);
 
         // 异步执行，避免阻塞 HTTP 线程
         streamExecutor.submit(() -> {
             try {
                 if (request.getMode() != null) {
-                    reActAgent.stream(request, event -> sendEvent(emitter, event));
+                    reActAgent.stream(request, event -> sendEvent(emitter, event, disconnected));
                 } else {
-                    simpleAgent.stream(request, event -> sendEvent(emitter, event));
+                    simpleAgent.stream(request, event -> sendEvent(emitter, event, disconnected));
                 }
                 emitter.complete();
             } catch (Exception e) {
-                log.error("Stream 处理失败", e);
-                emitter.completeWithError(e);
+                if (disconnected.get()) {
+                    // 客户端已走：正常收尾，不记 ERROR、不再派发异常
+                    log.debug("SSE 客户端断开，流提前结束：{}", rootMessage(e));
+                    try {
+                        emitter.complete();
+                    } catch (Exception ignore) {
+                    }
+                } else {
+                    log.error("Stream 处理失败", e);
+                    emitter.completeWithError(e);
+                }
             }
         });
         return emitter;
@@ -139,7 +152,8 @@ public class AgentController {
     /**
      * SSE 事件发送（抽取公共逻辑）
      */
-    private void sendEvent(SseEmitter emitter, StreamEvent event) {
+    private void sendEvent(SseEmitter emitter, StreamEvent event, AtomicBoolean disconnected) {
+        if (disconnected.get()) return; // 已断开：静默丢弃后续事件
         try {
             // done 事件 data 是 null，用空字符串代替
             String data = event.getData() != null ? event.getData() :
@@ -148,8 +162,24 @@ public class AgentController {
                     .name(event.getType().name().toLowerCase())
                     .data(data));
         } catch (Exception e) {
-            emitter.completeWithError(e);
+            // 客户端断开时 send 抛异常 -- 正常终止走 complete();
+            // 原来断 completeWithError 会触发异常再派发、撞上 text/event-stream 的JSON 二次故障
+            disconnected.set(true);   // 置位
+            log.debug("SSE 推送失败（客户端断开），停止推送：{}", rootMessage(e));  // 取根因
+            try {
+                emitter.complete();
+            } catch (Exception ignore) {
+                // 已完成/已错误。忽略
+            }
         }
+    }
+
+    /** 取异常根因的简短描述：SSE 场景异常链层层嵌套，完整 message 可达数千字符 */
+    private static String rootMessage(Throwable e) {
+        Throwable t = e;
+        while (t.getCause() != null && t.getCause() != t) t = t.getCause();
+        String msg = t.getMessage();
+        return t.getClass().getSimpleName() + (msg == null ? "" : ": " + msg);
     }
 
     @PreDestroy
