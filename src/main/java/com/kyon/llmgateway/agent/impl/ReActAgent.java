@@ -183,19 +183,15 @@ public class ReActAgent implements Agent {
         transitionTo(sessionId, AgentState.PLANNING, null);
 
         // 1. 让 LLM 生成计划
-        String planPrompt = "You need to complete a complex task. First, create a step-by-step plan. " +
-                "OutPut a Json array of steps. Each step should be a clear, actionable item." +
-                "Use the following format: [{\"step\": 1, \"description\": \"...\"}, ...]\n\n" +
-                "Task: " + request.getMessage();
+        List<Message> planMessages = buildPlanMessages(messages, request.getMessage());
 
-        List<Message> planMessages = new ArrayList<>();
-        planMessages.add(new Message("user", planPrompt, null, null, null));
-
+        // 获取 LLM 服务
         LLMService service = llmServiceFactory.getLlmService(request.getModel());
         ChatResponse planResponse = service.chat(model, planMessages, null);
         String planJson = planResponse != null ? ThoughtTags.strip(planResponse.getContent()): null;
 
         if (planJson == null || planJson.isBlank()) {
+            log.warn("计划生成失败，回退到ReAct模式");
             return executeReactModeSync(messages, request);
         }
 
@@ -204,6 +200,7 @@ public class ReActAgent implements Agent {
         try {
             planNode = getJsonNode(planJson);
         } catch (Exception e) {
+            log.warn("计划 JSON 解析失败，回退到ReAct模式：{}", e.getMessage());
             return executeReactModeSync(messages, request);
         }
 
@@ -219,10 +216,11 @@ public class ReActAgent implements Agent {
             if (desc.isBlank()) continue;
 
             // 构造子请求
-            AgentRequest sub = cloneRequest(request, "Execute this step: " + desc + "\nContext: " + request.getMessage());
+            AgentRequest sub = buildStepRequest(request, desc);
 
-            // 每个子步骤用独立的消息副本，互不干扰
-            List<Message> stepMessages = new ArrayList<>(messages);
+            // 每个子步骤用独立的消息副本，互不干扰, 步骤消息只进内存不落session
+            List<Message> stepMessages = buildStepMessages(messages, sub);
+
             AgentResponse stepResp = executeReactModeSync(stepMessages, sub);
             // 子循环的用量并入总计（AgentResponse 是 int 原始类型，无需判空）
             totalInputTokens += stepResp.getInputTokens();
@@ -232,8 +230,8 @@ public class ReActAgent implements Agent {
             finalContent.append(stepResp.getContent()).append("\n");
         }
 
+        // 计划级拼接结果不再重复落盘，每个子步骤的回答已由自循环各自持久化
         transitionTo(sessionId, AgentState.DONE, null);
-        sessionManager.append(sessionId, new Message("assistant", finalContent.toString(), null, null, null));
 
         return AgentResponse.builder()
                 .content(finalContent.toString())
@@ -398,14 +396,9 @@ public class ReActAgent implements Agent {
 
 
         // 1. 让 LLM 生成计划
-        String planPrompt = "You need to complete a complex task. First, create a step-by-step plan to solve the user's request. " +
-                "OutPut a Json array of state. Each step should be a clear, actionable item." +
-                "Use the following format: [{\"step\": 1, \"description\": \"...\"}, ...]\n\n" +
-                "Task: " + request.getMessage();
+        List<Message> planMessages = buildPlanMessages(messages, request.getMessage());
 
-        List<Message> planMessages = new ArrayList<>(messages);
-        planMessages.add(new Message("system", planPrompt, null, null, null));
-
+        // 获取 LLM 服务
         LLMService service = llmServiceFactory.getLlmService(request.getModel());
         ChatResponse planResponse = service.chat(model, planMessages, null);
         String planJson = planResponse != null ? ThoughtTags.strip(planResponse.getContent()) : null;
@@ -437,14 +430,10 @@ public class ReActAgent implements Agent {
             log.info("执行计划步骤: {}", description);
 
             // 构造子请求
-            AgentRequest subRequest = new AgentRequest();
-            subRequest.setSessionId(sessionId);
-            subRequest.setModel(request.getModel());
-            subRequest.setMode(AgentMode.REACT);
-            subRequest.setMessage("Execute this step: " + description + "\n\nOriginal task context: " + request.getMessage());
+            AgentRequest subRequest = buildStepRequest(request, description);
 
             // 每个子步骤用独立的消息副本，互不干扰
-            List<Message> stepMessages = new ArrayList<>(messages);
+            List<Message> stepMessages = buildStepMessages(messages, subRequest);
 
             // 子循环用同一个 messages 和 emitter
             executeReactMode(stepMessages, subRequest, emitter);
@@ -599,6 +588,42 @@ public class ReActAgent implements Agent {
         if (tokens > warnTokens) {
             log.warn("上下文 token 接近上限: {}/{} ({}%)", tokens, contextWindow, tokens*100/contextWindow);
         }
+    }
+
+    // ============= PLAN 模式单一出处构造 ==========
+    /**
+     * 计划生成消息（D1/D2/D3）:历史拷贝 + system 角色 + steps 文案
+     * 同步与流式公用，杜绝双路漂移
+     */
+    private List<Message> buildPlanMessages(List<Message> history, String task) {
+        String planPrompt = "You need to complete a complex task. First, create a step-by-step plan to solve the user's request. " +
+                "OutPut a Json array of steps. Each step should be a clear, actionable item." +
+                "Use the following format: [{\"step\": 1, \"description\": \"...\"}, ...]\n\n" +
+                "Task: " + task;
+
+        List<Message> planMessages = new ArrayList<>(history);
+        planMessages.add(new Message("system", planPrompt, null, null, null));
+        return planMessages;
+    }
+
+    /**
+     * 步骤子请求：克隆原请求 + 显示 REACT 模式 + 统一 context 文案
+     */
+    private AgentRequest buildStepRequest(AgentRequest original, String stepDescription) {
+        AgentRequest sub = cloneRequest(original,
+                "Execute this step: " + stepDescription + "\n\nOriginal task context: " + original.getMessage());
+        sub.setMode(AgentMode.REACT);
+        return sub;
+    }
+
+    /**
+     * 步骤消息（B1）：步骤文本以 user 角色进内存消息副本
+     * 在子循环 initialSize 划界之前加入，故不会被持久化到session
+     */
+    private List<Message> buildStepMessages(List<Message> baseHistory, AgentRequest stepRequest) {
+        List<Message> stepMessages = new ArrayList<>(baseHistory);
+        stepMessages.add(new Message("user", stepRequest.getMessage(), null, null, null));
+        return stepMessages;
     }
 
 }
