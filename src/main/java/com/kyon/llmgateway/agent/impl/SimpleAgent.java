@@ -1,6 +1,7 @@
 package com.kyon.llmgateway.agent.impl;
 
 import com.kyon.llmgateway.agent.*;
+import com.kyon.llmgateway.agent.engine.ThoughtTags;
 import com.kyon.llmgateway.agent.engine.ToolEngine;
 import com.kyon.llmgateway.agent.engine.ToolResult;
 import com.kyon.llmgateway.agent.session.SessionManager;
@@ -81,9 +82,10 @@ public class SimpleAgent implements Agent {
                 break;
             }
 
-            // 追加 assistant tool_calls 消息
+            // 追加 assistant tool_calls 消息 (思考标签不进历史)
             sessionManager.append(sessionId,
-                    new Message("assistant", lastResponse.getContent(), lastResponse.getToolCalls(), null, null));
+                    new Message("assistant", ThoughtTags.strip(lastResponse.getContent()),
+                            lastResponse.getToolCalls(), null, null));
 
             // 执行工具
             List<ToolResult> results = toolEngine.execute(lastResponse.getToolCalls());
@@ -103,7 +105,7 @@ public class SimpleAgent implements Agent {
 
         // 5. 追加最终回答
         String finalContent = (lastResponse != null && lastResponse.getContent() != null) ?
-                lastResponse.getContent() : "已达到最大工具调用次数限制";
+                ThoughtTags.strip(lastResponse.getContent()) : "已达到最大工具调用次数限制";
         sessionManager.append(sessionId,
                 new Message("assistant", finalContent, null, null, null));
 
@@ -165,7 +167,8 @@ public class SimpleAgent implements Agent {
 
                 // 追加 assistant 消息
                 sessionManager.append(sessionId,
-                        new Message("assistant", lastResponse.getContent(), lastResponse.getToolCalls(), null, null));
+                        new Message("assistant", ThoughtTags.strip(lastResponse.getContent()),
+                                lastResponse.getToolCalls(), null, null));
 
                 // 执行工具
                 List<ToolResult> results = toolEngine.execute(lastResponse.getToolCalls());
@@ -181,7 +184,7 @@ public class SimpleAgent implements Agent {
             }
             // 5. 追加最终回答
             String finalContent = (lastResponse != null && lastResponse.getContent() != null) ?
-                    lastResponse.getContent() : "已达到最大工具调用次数限制";
+                    ThoughtTags.strip(lastResponse.getContent()) : "已达到最大工具调用次数限制";
             sessionManager.append(sessionId,
                     new Message("assistant", finalContent, null, null, null));
 

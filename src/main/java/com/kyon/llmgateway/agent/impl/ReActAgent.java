@@ -2,6 +2,7 @@ package com.kyon.llmgateway.agent.impl;
 
 import com.kyon.llmgateway.agent.*;
 import com.kyon.llmgateway.agent.engine.ContextManager;
+import com.kyon.llmgateway.agent.engine.ThoughtTags;
 import com.kyon.llmgateway.agent.engine.TokenCounter;
 import com.kyon.llmgateway.agent.engine.ToolEngine;
 import com.kyon.llmgateway.agent.engine.ToolResult;
@@ -42,8 +43,8 @@ public class ReActAgent implements Agent {
     private int contextWindow;
 
     // thinking 标签常量
-    private static final String OPEN_TAG = "<thinking>";
-    private static final String CLOSE_TAG = "</thinking>";
+    private static final String OPEN_TAG = ThoughtTags.OPEN;
+    private static final String CLOSE_TAG = ThoughtTags.CLOSE;
 
     // 每个 session 独立状态（ConcurrentHashMap 保证线程安全）
     private final ConcurrentHashMap<String, AgentState> sessionStates = new ConcurrentHashMap<>();
@@ -112,10 +113,13 @@ public class ReActAgent implements Agent {
                 totalOutputTokens += response.getOutputTokens() != null ? response.getOutputTokens() : 0;
             }
 
+            // 思考标签不进历史与最终回答（strip 对 null 原样返回）
+            String content = ThoughtTags.strip(response != null ? response.getContent() : null);
+
             // 出口
             if (response == null || !response.hasToolCalls()) {
-                finalContent = (response != null && response.getContent() != null)
-                        ? response.getContent()
+                finalContent = (content != null)
+                        ? content
                         : "处理完成，但是未生成文本回复";
                 break;
             }
@@ -123,7 +127,7 @@ public class ReActAgent implements Agent {
             transitionTo(sessionId, AgentState.ACTING, null);
 
             // 追加 assistant 消息
-            Message assistantMsg = new Message("assistant", response.getContent(), response.getToolCalls(), null, null);
+            Message assistantMsg = new Message("assistant", content, response.getToolCalls(), null, null);
             messages.add(assistantMsg);
 
             // 执行工具
@@ -189,7 +193,7 @@ public class ReActAgent implements Agent {
 
         LLMService service = llmServiceFactory.getLlmService(request.getModel());
         ChatResponse planResponse = service.chat(model, planMessages, null);
-        String planJson = planResponse != null ? planResponse.getContent() : null;
+        String planJson = planResponse != null ? ThoughtTags.strip(planResponse.getContent()): null;
 
         if (planJson == null || planJson.isBlank()) {
             return executeReactModeSync(messages, request);
@@ -321,7 +325,7 @@ public class ReActAgent implements Agent {
                     delta -> extractThoughtAndStream(delta, thoughtBuffer, inThought, emitter),
                     r -> emitter.accept(StreamEvent.thinking(r))
             );
-            fullResponse = response != null ? response.getContent() : "";
+            fullResponse = response != null ? ThoughtTags.strip(response.getContent()) : "";
 
             if (response == null || !response.hasToolCalls()) {
                 // 缓冲里剩下的只有不完整的标签碎片，不该推
@@ -404,7 +408,7 @@ public class ReActAgent implements Agent {
 
         LLMService service = llmServiceFactory.getLlmService(request.getModel());
         ChatResponse planResponse = service.chat(model, planMessages, null);
-        String planJson = planResponse != null ? planResponse.getContent() : null;
+        String planJson = planResponse != null ? ThoughtTags.strip(planResponse.getContent()) : null;
 
         if (planJson == null || planJson.isBlank()) {
             log.warn("计划生成失败, 回退到 REACT 模式");
