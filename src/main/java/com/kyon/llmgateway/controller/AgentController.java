@@ -67,9 +67,9 @@ public class AgentController {
 
         // 根据是否有 mode 来决定是否采用 ReAct
         if (request.getMode() != null) {
-            response = reActAgent.chat(request);
+            response = reActAgent.chat(request);   // react 与 plan_execute 皆走 ReActAgent
         } else {
-            response = simpleAgent.chat(request);
+            response = simpleAgent.chat(request);  // 仅 mode 为 null 时走 SimpleAgent
         }
         return ApiResult.success(response);
     }
