@@ -6,10 +6,10 @@ import com.kyon.llmgateway.eval.model.ScorerResult;
 import org.springframework.stereotype.Component;
 
 @Component
-public class ContainScorer implements Scorer {
+public class ContainsScorer implements Scorer {
 
     @Override
-    public String type() { return "contain"; }
+    public String type() { return "contains"; }
 
     @Override
     public ScorerResult score(Criterion criterion, CaseOutput output) {
