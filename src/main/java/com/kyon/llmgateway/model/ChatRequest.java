@@ -10,7 +10,7 @@ import tools.jackson.databind.JsonNode;
 import java.util.List;
 
 /**
- *  模型请求
+ * 模型请求
  */
 @Builder
 @Data
@@ -33,8 +33,8 @@ public class ChatRequest {
 
     /**
      * 工具调用控制，OpenAI 规范的联合类型（string | object）：
-     *   "auto" / "none" / "required"                   —— 字符串形态
-     *   {"type":"function","function":{"name":"..."}}   —— 对象形态（强制指定函数）
+     * "auto" / "none" / "required"                   —— 字符串形态
+     * {"type":"function","function":{"name":"..."}}   —— 对象形态（强制指定函数）
      * 用 JsonNode 承载：反序列化两种形态都收，序列化原样转发（网关忠实搬运，校验交给上游）。
      */
     @JsonProperty("tool_choice")

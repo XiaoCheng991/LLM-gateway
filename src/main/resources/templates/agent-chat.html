@@ -70,7 +70,8 @@
         <option value="nvidia/stepfun-ai/step-5-preview">Step-5-preview</option>
         <option value="nvidia/deepseek-ai/deepseek-v4.1-flash">DeepSeek V4.1 FLASH</option>
     </select>
-    <textarea id="inputBox" placeholder="输入消息..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+    <textarea id="inputBox" placeholder="输入消息..." rows="1"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
     <button id="sendBtn" onclick="sendMessage()">发送</button>
 </div>
 

@@ -54,7 +54,9 @@ public abstract class BaseLLMAdapter implements LLMService {
 
     // 子类仅需要提供三个配置
     protected abstract String getBaseUrl();
+
     protected abstract String getApiKey();
+
     public abstract String getProviderName();
 
     // ObjectMapper
@@ -182,7 +184,7 @@ public abstract class BaseLLMAdapter implements LLMService {
     /**
      * OpenAI 兼容 SSE 流式转发。
      * 帧格式：data: {"id":"chatcmpl-..","object":"chat.completion.chunk","created":..,
-     *              "model":"..","choices":[{"index":0,"delta":{...},"finish_reason":null}]}
+     * "model":"..","choices":[{"index":0,"delta":{...},"finish_reason":null}]}
      * 结尾：   finish_reason 帧 → usage 帧 → data: [DONE]
      * 不执行 tool loop：上游返回的 delta.tool_calls 原样透传给客户端。
      */
@@ -347,8 +349,9 @@ public abstract class BaseLLMAdapter implements LLMService {
 
     /**
      * 流式调用 LLM，同时累及完整响应，用于 Tool Loop
-     * @param messages 对话历史
-     * @param tools 工具定义
+     *
+     * @param messages       对话历史
+     * @param tools          工具定义
      * @param onContentDelta 每个 content delta 的回调，推给前端
      * @return 完整的 ChatResponse（含 finishReason 和 toolCalls）
      */
@@ -517,7 +520,9 @@ public abstract class BaseLLMAdapter implements LLMService {
 
     // --------- SSE 帧构造（OpenAI chat.completion.chunk 格式）---------
 
-    /** 普通帧：content / tool_calls 透传，或结束时的 finish_reason */
+    /**
+     * 普通帧：content / tool_calls 透传，或结束时的 finish_reason
+     */
     private String chunk(String id, String model, long created, JsonNode delta, String finishReason) {
         try {
             ObjectNode root = om.createObjectNode();
@@ -536,7 +541,9 @@ public abstract class BaseLLMAdapter implements LLMService {
         }
     }
 
-    /** usage 帧：choices 为空数组，OpenAI规范 */
+    /**
+     * usage 帧：choices 为空数组，OpenAI规范
+     */
     private String usageChunk(String id, String model, long created, int promptTokens, int completionTokens) {
         try {
             ObjectNode root = om.createObjectNode();
@@ -555,7 +562,9 @@ public abstract class BaseLLMAdapter implements LLMService {
         }
     }
 
-    /** 错误帧 */
+    /**
+     * 错误帧
+     */
     private String errorChunk(String id, String model, long created, String message) {
         try {
             ObjectNode root = om.createObjectNode();

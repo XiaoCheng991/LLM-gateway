@@ -85,7 +85,7 @@ public class SessionManager {
      */
     public String newSessionId() {
         return UUID.randomUUID().toString()         // "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-                .replace("-","")  // "a1b2c3d4e5f67890abcdef1234567890"
+                .replace("-", "")  // "a1b2c3d4e5f67890abcdef1234567890"
                 .substring(0, 16);                  // "a1b2c3d4e5f67890"
     }
 }

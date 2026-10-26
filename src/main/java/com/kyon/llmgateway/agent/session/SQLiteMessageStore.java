@@ -34,17 +34,17 @@ public class SQLiteMessageStore implements MessageStore {
         try (Connection conn = DriverManager.getConnection(dbUrl);
              Statement stmt = conn.createStatement()) {
             stmt.execute("""
-              CREATE TABLE IF NOT EXISTS messages (
-                  id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  session_id TEXT NOT NULL,
-                  role TEXT NOT NULL,
-                  content TEXT,
-                  tool_calls TEXT,
-                  tool_call_id TEXT,
-                  name TEXT,
-                  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-              )
-          """);
+                        CREATE TABLE IF NOT EXISTS messages (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            session_id TEXT NOT NULL,
+                            role TEXT NOT NULL,
+                            content TEXT,
+                            tool_calls TEXT,
+                            tool_call_id TEXT,
+                            name TEXT,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """);
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)");
             log.info("SQLite messages 表初始化完成");
         } catch (Exception e) {
@@ -81,7 +81,7 @@ public class SQLiteMessageStore implements MessageStore {
         List<Message> messages = new ArrayList<>();
 
         try (Connection conn = DriverManager.getConnection(dbUrl);
-            PreparedStatement ps = conn.prepareStatement(sql)) {
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, sessionId);
 
             // 执行查询，读取每一行数据

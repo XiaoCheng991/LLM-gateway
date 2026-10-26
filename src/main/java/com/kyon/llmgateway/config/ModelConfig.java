@@ -23,5 +23,6 @@ public class ModelConfig {
                 .filter(m -> m.getModel().equalsIgnoreCase(modelName))
                 .findFirst()
                 .map(ModelInfo::getProvider)
-                .orElseThrow(() -> new IllegalArgumentException("未找到模型: " + modelName));    }
+                .orElseThrow(() -> new IllegalArgumentException("未找到模型: " + modelName));
+    }
 }

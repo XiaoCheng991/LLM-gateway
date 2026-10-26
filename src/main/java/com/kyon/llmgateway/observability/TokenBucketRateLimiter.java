@@ -19,9 +19,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * 桶会随时间自动补水，速率 = requestPerMinute / 60 每秒
  * <p>
  * 非消耗性预检（tryAcquireNonDestructive）:
- *   在 HTTP 请求前检查 - 不扣 token，只看够不够
- *   成功后（HTTP 200）才调用 recordSuccess 扣 token
- *   这样重试不会浪费配置
+ * 在 HTTP 请求前检查 - 不扣 token，只看够不够
+ * 成功后（HTTP 200）才调用 recordSuccess 扣 token
+ * 这样重试不会浪费配置
  */
 @Component
 public class TokenBucketRateLimiter {
@@ -113,12 +113,13 @@ public class TokenBucketRateLimiter {
     /**
      * 限流统计
      */
-    public record RateLimitStats (
-        String provider,
-        int capacity,
-        long remainingTokens,
-        double refillRatePerSecond
-    ) {}
+    public record RateLimitStats(
+            String provider,
+            int capacity,
+            long remainingTokens,
+            double refillRatePerSecond
+    ) {
+    }
 
     @PostConstruct
     public void init() {

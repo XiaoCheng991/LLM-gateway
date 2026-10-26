@@ -23,7 +23,7 @@ public class ApiResult<T> {
     }
 
     public static <T> ApiResult<T> error(ResultCode resultCode) {
-       return new ApiResult<>(resultCode.getCode(), resultCode.getMsg(), null);
+        return new ApiResult<>(resultCode.getCode(), resultCode.getMsg(), null);
     }
 
     public static <T> ApiResult<T> error(ResultCode resultCode, String customMsg) {

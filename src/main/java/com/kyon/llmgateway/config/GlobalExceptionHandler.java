@@ -45,7 +45,9 @@ public class GlobalExceptionHandler {
         return ct != null && ct.contains(MediaType.TEXT_EVENT_STREAM_VALUE);
     }
 
-    /** 客户端断开判定：异常链含客户端侧专属异常，或消息含 disconnected client（容器侧断开通知）*/
+    /**
+     * 客户端断开判定：异常链含客户端侧专属异常，或消息含 disconnected client（容器侧断开通知）
+     */
     private boolean isClientDisconnect(Throwable e) {
         for (Throwable t = e; t != null; t = (t == t.getCause() ? null : t.getCause())) {
             String name = t.getClass().getName();
@@ -60,7 +62,9 @@ public class GlobalExceptionHandler {
         return false;
     }
 
-    /** 拿到 root 信息 */
+    /**
+     * 拿到 root 信息
+     */
     private static String rootMessage(Throwable e) {
         Throwable t = e;
         while (t.getCause() != null && t.getCause() != t) t = t.getCause();

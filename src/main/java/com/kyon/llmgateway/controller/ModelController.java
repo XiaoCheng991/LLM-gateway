@@ -22,6 +22,7 @@ public class ModelController {
 
     /**
      * 列出可用模型
+     *
      * @return 模型列表
      */
     @GetMapping("")

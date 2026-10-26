@@ -12,13 +12,19 @@ public class ConfigurableAdapter extends BaseLLMAdapter {
     }
 
     @Override
-    public String getProviderName() { return provider; }
+    public String getProviderName() {
+        return provider;
+    }
 
     @Override
-    protected String getBaseUrl() { return baseUrl; }
+    protected String getBaseUrl() {
+        return baseUrl;
+    }
 
     @Override
-    protected String getApiKey() { return apiKey; }
+    protected String getApiKey() {
+        return apiKey;
+    }
 
     @Override
     public String getEffectiveModel(String model) {

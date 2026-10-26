@@ -151,8 +151,11 @@ public class ReActAgent implements Agent {
 
                 // 双大括号初始化
                 toolHistory.add(new ToolCallRecord(
-                        new ToolCall() {{ setId(r.getToolCallId()); setName(r.getToolName()); }},
-                        r.getContent()
+                                new ToolCall() {{
+                                    setId(r.getToolCallId());
+                                    setName(r.getToolName());
+                                }},
+                                r.getContent()
                         )
                 );
             }
@@ -197,7 +200,7 @@ public class ReActAgent implements Agent {
         // 获取 LLM 服务
         LLMService service = llmServiceFactory.getLlmService(request.getModel());
         ChatResponse planResponse = service.chat(model, planMessages, null);
-        String planJson = planResponse != null ? ThoughtTags.strip(planResponse.getContent()): null;
+        String planJson = planResponse != null ? ThoughtTags.strip(planResponse.getContent()) : null;
 
         if (planJson == null || planJson.isBlank()) {
             log.warn("计划生成失败，回退到ReAct模式");
@@ -392,7 +395,7 @@ public class ReActAgent implements Agent {
         for (int i = initialSize; i < messages.size(); i++) {
             sessionManager.append(sessionId, messages.get(i));
         }
-        
+
         // 最终回答落盘
         if (fullResponse != null && !fullResponse.isBlank()) {
             sessionManager.append(sessionId, new Message("assistant", fullResponse, null, null, null));
@@ -461,6 +464,7 @@ public class ReActAgent implements Agent {
     }
 
     // ============== 辅助方法 ================
+
     /**
      * 思考内容提取（D-01/D-02）
      * <p>
@@ -614,11 +618,12 @@ public class ReActAgent implements Agent {
         int tokens = TokenCounter.estimateMessages(messages);
         int warnTokens = (int) (contextWindow * WARN_THRESHOLD);
         if (tokens > warnTokens) {
-            log.warn("上下文 token 接近上限: {}/{} ({}%)", tokens, contextWindow, tokens*100/contextWindow);
+            log.warn("上下文 token 接近上限: {}/{} ({}%)", tokens, contextWindow, tokens * 100 / contextWindow);
         }
     }
 
     // ============= PLAN 模式单一出处构造 ==========
+
     /**
      * 计划生成消息（D1/D2/D3）:历史拷贝 + system 角色 + steps 文案
      * 同步与流式公用，杜绝双路漂移

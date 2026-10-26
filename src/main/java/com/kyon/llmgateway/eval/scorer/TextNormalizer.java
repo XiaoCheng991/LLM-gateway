@@ -6,7 +6,8 @@ package com.kyon.llmgateway.eval.scorer;
  */
 public class TextNormalizer {
 
-    private TextNormalizer() { }
+    private TextNormalizer() {
+    }
 
     /**
      * 归一化规则（按顺序执行）
@@ -30,7 +31,9 @@ public class TextNormalizer {
         return out;
     }
 
-    /** 全角 ASCII -> 半角 */
+    /**
+     * 全角 ASCII -> 半角
+     */
     private static String toHalfWidth(String s) {
         StringBuilder sb = new StringBuilder(s.length());
         for (char c : s.toCharArray()) {

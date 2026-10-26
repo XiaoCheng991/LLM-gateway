@@ -8,9 +8,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class ExactMatchScorer implements Scorer {
 
-    /** 注册键，路由*/
+    /**
+     * 注册键，路由
+     */
     @Override
-    public String type() { return "exact"; }
+    public String type() {
+        return "exact";
+    }
 
     @Override
     public ScorerResult score(Criterion criterion, CaseOutput output) {

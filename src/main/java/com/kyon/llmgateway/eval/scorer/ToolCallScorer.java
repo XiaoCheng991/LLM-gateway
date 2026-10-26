@@ -8,9 +8,11 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
-public class ToolCallScorer implements Scorer{
+public class ToolCallScorer implements Scorer {
     @Override
-    public String type() { return "tool_call"; }
+    public String type() {
+        return "tool_call";
+    }
 
     @Override
     public ScorerResult score(Criterion criterion, CaseOutput output) {

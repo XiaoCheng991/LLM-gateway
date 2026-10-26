@@ -28,7 +28,9 @@ public class ContextManager {
     private int contextWindow;
     private static final double SUMMARIZE_THRESHOLD = 0.7;
 
-    /** 按消息数量裁剪，保留第一条 + 最近 N-1 条 */
+    /**
+     * 按消息数量裁剪，保留第一条 + 最近 N-1 条
+     */
     public List<Message> truncate(List<Message> messages) {
         if (messages.size() <= MAX_MESSAGES) return messages;
 
@@ -38,7 +40,9 @@ public class ContextManager {
         return new ArrayList<>(result);
     }
 
-    /** 按 token 数裁剪, 从最早的非 system 消息开始移除 */
+    /**
+     * 按 token 数裁剪, 从最早的非 system 消息开始移除
+     */
     public List<Message> truncateByTokens(List<Message> messages) {
         int total = TokenCounter.estimateMessages(messages);
         if (total <= MAX_TOKENS) return messages;
@@ -48,7 +52,7 @@ public class ContextManager {
         // 优化时间复杂度，从最早的 非 system 消息开始移除，直到 token 数低于阈值
         int index = 1; // index = 0 时第一条是 system message，跳过
         while (total > MAX_TOKENS && result.size() > 1) {
-           // 减去被移除消息的 token 数
+            // 减去被移除消息的 token 数
             Message removed = result.remove(index);
             total -= TokenCounter.estimateMessage(removed);
         }
@@ -69,8 +73,9 @@ public class ContextManager {
 
     /**
      * 讲历史消息压缩为摘要，保留最近 1/3（最少 5 条）
+     *
      * @param messages 完整消息列表
-     * @param factory   LLMServiceFactory，用于获取 LLM 做摘要
+     * @param factory  LLMServiceFactory，用于获取 LLM 做摘要
      */
     public List<Message> summarize(List<Message> messages, String model, LLMServiceFactory factory) {
         if (messages == null || messages.isEmpty() || factory == null) {

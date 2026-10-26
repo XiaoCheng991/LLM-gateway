@@ -68,7 +68,8 @@ public class EvalDatasetLoader {
                     + "（允许 llm / agent）");
             if (isBlank(c.getCategory())) throw new IllegalArgumentException(at + " 缺少 category");
             if (c.getInput() == null || c.getInput().isNull()) throw new IllegalArgumentException(at + " 缺少 input");
-            if (c.getCriteria() == null || c.getCriteria().isEmpty()) throw new IllegalArgumentException(at + " 缺少 criteria");
+            if (c.getCriteria() == null || c.getCriteria().isEmpty())
+                throw new IllegalArgumentException(at + " 缺少 criteria");
 
             validateInput(c, at);
             for (Criterion cr : c.getCriteria()) validateCriterion(cr, at);
@@ -80,9 +81,11 @@ public class EvalDatasetLoader {
      */
     private void validateInput(EvalCase c, String at) {
         if ("llm".equals(c.getKind())) {
-            if (!c.getInput().path("messages").isArray()) throw new IllegalArgumentException(at + " kind=llm时 input.messages 必须是数组");
+            if (!c.getInput().path("messages").isArray())
+                throw new IllegalArgumentException(at + " kind=llm时 input.messages 必须是数组");
         } else {
-            if (isBlank(c.getInput().path("message").asString(null))) throw new IllegalArgumentException(at + " kind=agent时, input.message 必填");
+            if (isBlank(c.getInput().path("message").asString(null)))
+                throw new IllegalArgumentException(at + " kind=agent时, input.message 必填");
         }
     }
 
@@ -104,9 +107,11 @@ public class EvalDatasetLoader {
                 if (isBlank(cr.getTool())) throw new IllegalArgumentException(at + " type=tool_call 需要 tool 字段");
             }
             case "llm_judge" -> {
-                if (cr.getDimension() == null) throw new IllegalArgumentException(at + " type=llm_judge 需要 dimension 字段");
+                if (cr.getDimension() == null)
+                    throw new IllegalArgumentException(at + " type=llm_judge 需要 dimension 字段");
             }
-            default -> { }
+            default -> {
+            }
         }
     }
 

@@ -16,8 +16,8 @@ import java.util.List;
  * POST /api/chat/completions - OpenAI 兼容纯转发端点
  * <p>
  * 职责边界
- *   /api/chat/completions    -> 纯LLM转发，严格 OpenAI兼容（无Agent介入）
- *   /api/chat/chat | stream  -> Agent 能力（tool loop、session、状态机）
+ * /api/chat/completions    -> 纯LLM转发，严格 OpenAI兼容（无Agent介入）
+ * /api/chat/chat | stream  -> Agent 能力（tool loop、session、状态机）
  * </p>
  * 这里不执行 tool loop: 请求里带 tools 时只把工具定义透传给模型
  * 返回的 tool_calls 原样交换客户端处理

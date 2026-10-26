@@ -37,7 +37,9 @@ public class ChatResponse {
     // LLM 返回的 tool_calls 数组，null 表示不需要调工具
     private JsonNode toolCalls;
 
-    /** 判断是否有工具调用 */
+    /**
+     * 判断是否有工具调用
+     */
     public boolean hasToolCalls() {
         return toolCalls != null && toolCalls.isArray() && !toolCalls.isEmpty();
     }
