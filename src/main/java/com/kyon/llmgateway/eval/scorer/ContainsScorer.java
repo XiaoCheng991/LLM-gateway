@@ -22,6 +22,7 @@ public class ContainsScorer implements Scorer {
                 return ScorerResult.of(1.0, "包含关键词「" + keyword + "」");
             }
         }
-        return ScorerResult.of(0.0, "未包含任一关键词：" + String.join("/", criterion.getValue()));
+        return ScorerResult.of(0.0, "未包含任一关键词：" + String.join("/", criterion.getValue())
+                + ", 实际输出（归一化）=\"" + TextNormalizer.preview(actual) + "\"");
     }
 }

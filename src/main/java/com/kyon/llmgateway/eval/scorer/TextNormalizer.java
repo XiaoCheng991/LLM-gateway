@@ -4,7 +4,7 @@ package com.kyon.llmgateway.eval.scorer;
  * 评测用的文本归一化：去掉「模型答的对但格式不通过」的噪声
  * 只为确定性 Scorer 服务，不做语义匹配
  */
-public class TextNormalizer {
+public final class TextNormalizer {
 
     private TextNormalizer() {
     }
@@ -40,5 +40,12 @@ public class TextNormalizer {
             sb.append(c >= 0xFF01 && c <= 0xFF5E ? (char) (c - 0xFEE0) : c);
         }
         return sb.toString().replace('　', ' ');
+    }
+
+    /**
+     * 提取缩略前80字
+     */
+    public static String preview(String s) {
+        return s.length() > 80 ? s.substring(0, 80) + "..." : s;
     }
 }

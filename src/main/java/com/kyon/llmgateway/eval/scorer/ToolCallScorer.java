@@ -21,9 +21,9 @@ public class ToolCallScorer implements Scorer {
             return ScorerResult.of(0.0, "Agent 未调用任何工具, 期望使用「" + criterion.getTool() + "」");
         }
         if (tools.contains(criterion.getTool())) {
-            return ScorerResult.of(1.0, "调用了工具「" + criterion.getTool() + "」(实际调用序列：" + String.join(" → ", tools) + ") ");
+            return ScorerResult.of(1.0, "调用了工具「" + criterion.getTool() + "」(实际调用序列：" + String.join(" → ", tools) + ")");
         }
 
-        return ScorerResult.of(0.0, "未调用「" + criterion.getTool() + "」, 实际调用序列：" + String.join(" → ", tools) + ") ");
+        return ScorerResult.of(0.0, "未调用「" + criterion.getTool() + "」, 实际调用序列：" + String.join(" → ", tools) + ")");
     }
 }
