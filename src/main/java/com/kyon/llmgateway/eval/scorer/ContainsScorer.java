@@ -9,7 +9,9 @@ import org.springframework.stereotype.Component;
 public class ContainsScorer implements Scorer {
 
     @Override
-    public String type() { return "contains"; }
+    public String type() {
+        return "contains";
+    }
 
     @Override
     public ScorerResult score(Criterion criterion, CaseOutput output) {

@@ -174,7 +174,9 @@ public class AgentController {
         }
     }
 
-    /** 取异常根因的简短描述：SSE 场景异常链层层嵌套，完整 message 可达数千字符 */
+    /**
+     * 取异常根因的简短描述：SSE 场景异常链层层嵌套，完整 message 可达数千字符
+     */
     private static String rootMessage(Throwable e) {
         Throwable t = e;
         while (t.getCause() != null && t.getCause() != t) t = t.getCause();
