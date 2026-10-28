@@ -57,9 +57,17 @@ llm-gateway/
 │   ├── model/                    # 数据模型（ChatRequest/Response、Message、统一响应体）
 │   ├── config/                   # 全局异常处理、模型配置、链路追踪
 │   ├── observability/            # Token 桶限流 + 超限异常
-│   └── service/
-│       ├── LLMService.java           # 核心接口：chat / stream
-│       └── LLMServiceFactory.java    # 按 yml 白名单把 model 路由到 provider 实例
+│   ├── service/
+│   │   ├── LLMService.java           # 核心接口：chat / stream
+│   │   └── LLMServiceFactory.java    # 按 yml 白名单把 model 路由到 provider 实例
+│   └── eval/                     # Eval 评测系统（回归评测）
+│       ├── model/                    # 用例数据结构：Dataset / Case / Criterion / Result / Report
+│       ├── dataset/                  # EvalDatasetLoader：读 JSON + schema 校验
+│       ├── scorer/                   # 判分器：exact / contains / tool_call / llm_judge
+│       ├── runner/                   # 执行器与编排：CaseExecutor / EvalRunner
+│       ├── report/                   # 报告输出：ConsoleReporter / JsonReporter
+│       └── EvalCli.java              # 命令行入口：--eval.dataset 触发
+├── eval/                         # Eval 数据集（datasets 入库）与报告（reports 入库）
 ├── data/                         # SQLite 会话库 + Agent 工作目录（不入库）
 ├── logs/                         # 运行日志（不入库）
 └── .env                          # 环境变量（不入库，参考 .env.example）
@@ -215,6 +223,54 @@ curl -X POST http://localhost:8080/api/chat/completions \
 
 ---
 
+## Eval 评测系统（回归评测）
+
+一套手写的离线评测：把用例写成 JSON，跑真实调用，用**确定性标准**（精确匹配 / 关键词 / 工具调用）判通过与否，用 **LLM-as-a-Judge** 观察主观维度，产出可复查的 JSON 报告。
+
+### 六个部件
+
+| 部件 | 类 | 干什么 |
+|---|---|---|
+| 数据 | `EvalDataset` / `EvalCase` / `Criterion` | 用例长什么样 |
+| 读取 | `EvalDatasetLoader` | 读 JSON 并做 schema 校验，格式错直接抛错 |
+| 执行 | `LlmCaseExecutor` / `AgentCaseExecutor` | 把一条用例变成一次真实调用 |
+| 判分 | `ExactMatch` / `Contains` / `ToolCall` / `LlmJudge` | 把输出变成「分数 + 理由」 |
+| 编排 | `EvalRunner` | 跑 + 判 + 定状态 + 汇总成 `EvalReport` |
+| 呈现 | `ConsoleReporter` / `JsonReporter` | 终端看 + 存文件 |
+
+判定规则只有一条真理：**通过与否只由确定性标准决定**；judge 只进 `dimensionScores` 供观察，不参与判定；执行失败记 `ERROR` 且不进分母。
+
+### 跑一次
+
+```bash
+# 数据集在 eval/datasets/chat-v1.json；不传 --eval.dataset 时应用正常启动，不做评测
+mvn spring-boot:run --eval.dataset=chat-v1 \
+  --eval.model=nvidia/minimaxai/minimax-m3.1-flash \
+  --eval.delay-ms=3000
+```
+
+常用参数：
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `--eval.dataset` | 空 | 数据集名（对应 `eval/datasets/<name>.json`）；空 = 不跑评测 |
+| `--eval.model` | 必填 | 被测模型全名，必须在 yml 白名单里 |
+| `--eval.judge` | 空 | judge 模型；不给 = 不启用 judge（省一半上游调用） |
+| `--eval.delay-ms` | 500 | 两条用例之间的间隔，撞上游限流就调大 |
+| `--eval.max-retries` | 2 | 上游瞬时故障（429 / 5xx / 连不上）的重试次数 |
+| `--eval.retry-base-ms` | 15000 | 退避基数，第 n 次重试等 `base × n` 毫秒 |
+
+退出码：`0` 跑完了（PASS / FAIL 都算跑完）、`1` 有用例执行失败（ERROR）、`2` 参数或数据集错误。
+
+### 报告
+
+- 终端：`ConsoleReporter` 打印汇总、分类通过率、失败明细、被跳过的标准
+- 文件：`eval/reports/<dataset>-<model>-<timestamp>.json`
+
+`passRate = passed / (passed + failed)`，**ERROR 不进分母**——上游限流导致的「没测成」不会被算成「模型变差」。报告顶部的 `note` 会显式说明这类情况。
+
+---
+
 ## 技术选型 & 设计决策
 
 ### 为什么手写 Adapter 而不使用 Spring AI / LangChain4j？
@@ -249,12 +305,12 @@ JDK 11+ 内置，无需外部依赖。支持 HTTP/2、异步调用、流式响�
 ### 🚧 进行中
 
 - **SSE 流式响应** — 让 AI 回复逐字推送给客户端
+- **Eval 评测系统** — 手写数据集 + 确定性判分 + LLM Judge + JSON 报告
 
 ### 📋 规划
 
 - `GET /api/models` — 查询可用模型列表
 - SLF4J 日志 — 结构化记录请求链路
-- Eval 评测系统 — 对比不同模型/prompt 的效果
 - A/B 对比测试
 - Rate Limiting
 - 更多 Provider (Ollama, Claude, …)

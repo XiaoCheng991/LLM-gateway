@@ -51,3 +51,5 @@ agent:
 eval:
   max-retries: 2
   retry-base-ms: 15000
+  dataset-dir: eval/datasets
+  report-dir: eval/reports

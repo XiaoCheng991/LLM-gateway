@@ -1,0 +1,235 @@
+{
+  "datasetName" : "chat-v1",
+  "datasetVersion" : "0.1",
+  "targetModel" : "nvidia/minimaxai/minimax-m3.1-flash",
+  "judgeModel" : "",
+  "ranAt" : "2026-10-28T04:13:06.886274Z",
+  "totalCases" : 10,
+  "passed" : 10,
+  "failed" : 0,
+  "errors" : 0,
+  "passRate" : 1.0,
+  "categoryStats" : {
+    "factual" : {
+      "passed" : 3,
+      "total" : 3,
+      "passRate" : 1.0
+    },
+    "format-adherence" : {
+      "passed" : 4,
+      "total" : 4,
+      "passRate" : 1.0
+    },
+    "reasoning" : {
+      "passed" : 1,
+      "total" : 1,
+      "passRate" : 1.0
+    },
+    "tool-selection" : {
+      "passed" : 2,
+      "total" : 2,
+      "passRate" : 1.0
+    }
+  },
+  "dimensionScores" : { },
+  "note" : null,
+  "results" : [ {
+    "caseId" : "fmt-001",
+    "category" : "format-adherence",
+    "kind" : "llm",
+    "status" : "PASS",
+    "output" : "OK",
+    "errorMessage" : null,
+    "latencyMs" : 2468,
+    "scores" : {
+      "exact#0" : {
+        "score" : 1.0,
+        "reason" : "精确匹配「ok」",
+        "skipped" : false,
+        "dimension" : null
+      }
+    },
+    "skippedReasons" : [ ],
+    "note" : null
+  }, {
+    "caseId" : "fmt-002",
+    "category" : "format-adherence",
+    "kind" : "llm",
+    "status" : "PASS",
+    "output" : "42",
+    "errorMessage" : null,
+    "latencyMs" : 548,
+    "scores" : {
+      "exact#0" : {
+        "score" : 1.0,
+        "reason" : "精确匹配「42」",
+        "skipped" : false,
+        "dimension" : null
+      }
+    },
+    "skippedReasons" : [ ],
+    "note" : null
+  }, {
+    "caseId" : "fmt-003",
+    "category" : "format-adherence",
+    "kind" : "llm",
+    "status" : "PASS",
+    "output" : "收到",
+    "errorMessage" : null,
+    "latencyMs" : 846,
+    "scores" : {
+      "exact#0" : {
+        "score" : 1.0,
+        "reason" : "精确匹配「收到」",
+        "skipped" : false,
+        "dimension" : null
+      }
+    },
+    "skippedReasons" : [ ],
+    "note" : null
+  }, {
+    "caseId" : "fact-001",
+    "category" : "factual",
+    "kind" : "llm",
+    "status" : "PASS",
+    "output" : "北京",
+    "errorMessage" : null,
+    "latencyMs" : 1366,
+    "scores" : {
+      "contains#0" : {
+        "score" : 1.0,
+        "reason" : "包含关键词「北京」",
+        "skipped" : false,
+        "dimension" : null
+      }
+    },
+    "skippedReasons" : [ ],
+    "note" : null
+  }, {
+    "caseId" : "fact-002",
+    "category" : "factual",
+    "kind" : "llm",
+    "status" : "PASS",
+    "output" : "HTTP（超文本传输协议）是一种应用层协议，采用请求—响应模式，用于在客户端（如浏览器）与服务器之间传输网页、图片等资源。",
+    "errorMessage" : null,
+    "latencyMs" : 7815,
+    "scores" : {
+      "contains#0" : {
+        "score" : 1.0,
+        "reason" : "包含关键词「超文本传输协议」",
+        "skipped" : false,
+        "dimension" : null
+      }
+    },
+    "skippedReasons" : [ ],
+    "note" : null
+  }, {
+    "caseId" : "reason-001",
+    "category" : "reasoning",
+    "kind" : "llm",
+    "status" : "PASS",
+    "output" : "12",
+    "errorMessage" : null,
+    "latencyMs" : 551,
+    "scores" : {
+      "contains#0" : {
+        "score" : 1.0,
+        "reason" : "包含关键词「12」",
+        "skipped" : false,
+        "dimension" : null
+      }
+    },
+    "skippedReasons" : [ ],
+    "note" : null
+  }, {
+    "caseId" : "judge-001",
+    "category" : "factual",
+    "kind" : "llm",
+    "status" : "PASS",
+    "output" : "API（应用程序编程接口）是一组标准化的规则和工具，让不同软件能够相互通信、调用功能或共享数据，而无需了解彼此的内部实现细节。",
+    "errorMessage" : null,
+    "latencyMs" : 9013,
+    "scores" : {
+      "contains#0" : {
+        "score" : 1.0,
+        "reason" : "包含关键词「接口」",
+        "skipped" : false,
+        "dimension" : null
+      },
+      "llm_judge#1" : {
+        "score" : 0.0,
+        "reason" : "judge 模型未配置",
+        "skipped" : true,
+        "dimension" : null
+      }
+    },
+    "skippedReasons" : [ "llm_judge#1 llm_judge: judge 模型未配置" ],
+    "note" : null
+  }, {
+    "caseId" : "tool-001",
+    "category" : "tool-selection",
+    "kind" : "agent",
+    "status" : "PASS",
+    "output" : "17 × 23 = **391**。",
+    "errorMessage" : null,
+    "latencyMs" : 2475,
+    "scores" : {
+      "tool_call#0" : {
+        "score" : 1.0,
+        "reason" : "调用了工具「calculator」(实际调用序列：calculator)",
+        "skipped" : false,
+        "dimension" : null
+      },
+      "contains#1" : {
+        "score" : 1.0,
+        "reason" : "包含关键词「391」",
+        "skipped" : false,
+        "dimension" : null
+      }
+    },
+    "skippedReasons" : [ ],
+    "note" : null
+  }, {
+    "caseId" : "tool-002",
+    "category" : "tool-selection",
+    "kind" : "agent",
+    "status" : "PASS",
+    "output" : "计算结果：**(12 + 8) × 3 = 60**",
+    "errorMessage" : null,
+    "latencyMs" : 4774,
+    "scores" : {
+      "tool_call#0" : {
+        "score" : 1.0,
+        "reason" : "调用了工具「calculator」(实际调用序列：calculator)",
+        "skipped" : false,
+        "dimension" : null
+      },
+      "contains#1" : {
+        "score" : 1.0,
+        "reason" : "包含关键词「60」",
+        "skipped" : false,
+        "dimension" : null
+      }
+    },
+    "skippedReasons" : [ ],
+    "note" : null
+  }, {
+    "caseId" : "fmt-004",
+    "category" : "format-adherence",
+    "kind" : "llm",
+    "status" : "PASS",
+    "output" : "The weather is very nice today.",
+    "errorMessage" : null,
+    "latencyMs" : 3749,
+    "scores" : {
+      "contains#0" : {
+        "score" : 1.0,
+        "reason" : "包含关键词「weather」",
+        "skipped" : false,
+        "dimension" : null
+      }
+    },
+    "skippedReasons" : [ ],
+    "note" : null
+  } ]
+}
