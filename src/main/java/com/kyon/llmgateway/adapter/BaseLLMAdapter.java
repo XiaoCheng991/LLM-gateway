@@ -7,6 +7,7 @@ import com.kyon.llmgateway.model.Message;
 import com.kyon.llmgateway.model.ToolDefinition;
 import com.kyon.llmgateway.observability.RateLimitExceededException;
 import com.kyon.llmgateway.observability.TokenBucketRateLimiter;
+import com.kyon.llmgateway.observability.UpstreamHttpException;
 import com.kyon.llmgateway.service.LLMService;
 import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
@@ -113,7 +114,7 @@ public abstract class BaseLLMAdapter implements LLMService {
 
         // 上游 HTTP 层错误（4xx/5xx）：错误体里没有 choices
         if (response.statusCode() >= 400) {
-            throw new RuntimeException("上游 HTTP %d: %s".formatted(response.statusCode(), response.body()));
+            throw new UpstreamHttpException(response.statusCode(), response.body());
         }
 
         // 4. 解析响应, 解析为ChatResponse
@@ -385,7 +386,7 @@ public abstract class BaseLLMAdapter implements LLMService {
         // 上游 4xx/5xx 回的是 JSON 错误体而非 SSE
         if (response.statusCode() >= 400) {
             String errBody = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
-            throw new RuntimeException("上游 HTTP %d: %s".formatted(response.statusCode(), errBody));
+            throw new UpstreamHttpException(response.statusCode(), errBody);
         }
 
         // 3. 逐行读，累计 content

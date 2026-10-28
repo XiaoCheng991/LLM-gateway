@@ -47,3 +47,7 @@ agent:
       requests-per-minute: 50
     agnes:
       requests-per-minute: 30
+
+eval:
+  max-retries: 2
+  retry-base-ms: 15000
