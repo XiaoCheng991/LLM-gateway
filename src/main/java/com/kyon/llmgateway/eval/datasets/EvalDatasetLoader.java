@@ -1,4 +1,4 @@
-package com.kyon.llmgateway.eval.dataset;
+package com.kyon.llmgateway.eval.datasets;
 
 import com.kyon.llmgateway.eval.model.Criterion;
 import com.kyon.llmgateway.eval.model.EvalCase;
