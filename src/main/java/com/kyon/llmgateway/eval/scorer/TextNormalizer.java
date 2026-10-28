@@ -43,9 +43,9 @@ public final class TextNormalizer {
     }
 
     /**
-     * 提取缩略前80字
+     * 提取缩略前
      */
-    public static String preview(String s) {
-        return s.length() > 80 ? s.substring(0, 80) + "..." : s;
+    public static String preview(String s, int length) {
+        return s.length() > length ? s.substring(0, length) + "..." : s;
     }
 }

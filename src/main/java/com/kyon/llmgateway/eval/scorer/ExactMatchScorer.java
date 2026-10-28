@@ -20,7 +20,7 @@ public class ExactMatchScorer implements Scorer {
     public ScorerResult score(Criterion criterion, CaseOutput output) {
         // 归一化真实的输出
         String actual = TextNormalizer.normalize(output.getContent());
-        String preview = TextNormalizer.preview(actual);
+        String preview = TextNormalizer.preview(actual, 80);
 
         // 比较归一化后的 标准值 与 真实输出 是否精确匹配
         for (String expected : criterion.getValue()) {

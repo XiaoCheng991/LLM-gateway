@@ -18,5 +18,5 @@ public class EvalCase {
     private String kind;                // "llm" | "agent"
     private String category;            // factual / reasoning / tool-selection / format-adherence
     private JsonNode input;             // kind=llm -> {messages:[...]}; kind=agent -> {message, mode}
-    private List<Criterion> criteria;   // 该 case 的单条评分标准
+    private List<Criterion> criteria;   // 该 case 的评分标准
 }

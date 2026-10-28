@@ -23,6 +23,6 @@ public class ContainsScorer implements Scorer {
             }
         }
         return ScorerResult.of(0.0, "未包含任一关键词：" + String.join("/", criterion.getValue())
-                + ", 实际输出（归一化）=\"" + TextNormalizer.preview(actual) + "\"");
+                + ", 实际输出（归一化）=\"" + TextNormalizer.preview(actual, 80) + "\"");
     }
 }

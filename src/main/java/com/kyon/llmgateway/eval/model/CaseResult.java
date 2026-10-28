@@ -29,4 +29,5 @@ public class CaseResult {
     private long latencyMs;
     private Map<String, ScorerResult> scores;       // key = criteria 的 type 或 "type#序号"
     private List<String> skippedReasons;
+    private String note;
 }
