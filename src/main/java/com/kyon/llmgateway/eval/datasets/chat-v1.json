@@ -1,0 +1,137 @@
+{
+  "name": "chat-v1",
+  "version": "0.1",
+  "cases": [
+    {
+      "id": "fmt-001",
+      "kind": "llm",
+      "category": "format-adherence",
+      "input": {
+        "messages": [
+          {"role": "user", "content": "只回复一个英文单词：OK。不要标点，不要解释。"}
+        ]
+      },
+      "criteria": [
+        {"type": "exact", "value": ["ok", "ok."]}
+      ]
+    },
+    {
+      "id": "fmt-002",
+      "kind": "llm",
+      "category": "format-adherence",
+      "input": {
+        "messages": [
+          {"role": "user", "content": "只回复一个数字：42。不要标点，不要解释。"}
+        ]
+      },
+      "criteria": [
+        {"type": "exact", "value": ["42", "42."]}
+      ]
+    },
+    {
+      "id": "fmt-003",
+      "kind": "llm",
+      "category": "format-adherence",
+      "input": {
+        "messages": [
+          {"role": "user", "content": "只回复两个字：收到。不要标点，不要解释。"}
+        ]
+      },
+      "criteria": [
+        {"type": "exact", "value": ["收到", "收到."]}
+      ]
+    },
+    {
+      "id": "fact-001",
+      "kind": "llm",
+      "category": "factual",
+      "input": {
+        "messages": [
+          {"role": "user", "content": "中国的首都是哪座城市？只回答城市名。"}
+        ]
+      },
+      "criteria": [
+        {"type": "contains", "value": ["北京"]}
+      ]
+    },
+    {
+      "id": "fact-002",
+      "kind": "llm",
+      "category": "factual",
+      "input": {
+        "messages": [
+          {"role": "user", "content": "请用一句话说明 HTTP 是什么。"}
+        ]
+      },
+      "criteria": [
+        {"type": "contains", "value": ["超文本传输协议", "传输协议", "hypertext transfer protocol"]}
+      ]
+    },
+    {
+      "id": "reason-001",
+      "kind": "llm",
+      "category": "reasoning",
+      "input": {
+        "messages": [
+          {"role": "user", "content": "一个班有 30 名学生，其中 18 名是女生。男生有多少名？只回答数字。"}
+        ]
+      },
+      "criteria": [
+        {"type": "contains", "value": ["12"]}
+      ]
+    },
+    {
+      "id": "judge-001",
+      "kind": "llm",
+      "category": "factual",
+      "input": {
+        "messages": [
+          {"role": "user", "content": "用一句话解释什么是 API。"}
+        ]
+      },
+      "criteria": [
+        {"type": "contains", "value": ["接口", "应用程序"]},
+        {"type": "llm_judge", "dimension": "ACCURACY", "prompt": "答案是否准确解释了 API 的含义？"}
+      ]
+    },
+    {
+      "id": "tool-001",
+      "kind": "agent",
+      "category": "tool-selection",
+      "input": {
+        "message": "请用计算器算出 17 * 23 等于多少，并告诉我结果。",
+        "mode": "react"
+      },
+      "criteria": [
+        {"type": "tool_call", "tool": "calculator"},
+        {"type": "contains", "value": ["391"]}
+      ]
+    },
+    {
+      "id": "tool-002",
+      "kind": "agent",
+      "category": "tool-selection",
+      "input": {
+        "message": "请用计算器算出 (12 + 8) * 3 等于多少，并告诉我结果。",
+        "mode": "react"
+      },
+      "criteria": [
+        {"type": "tool_call", "tool": "calculator"},
+        {"type": "contains", "value": ["60"]}
+      ]
+    },
+    {
+      "id": "fmt-004",
+      "kind": "llm",
+      "category": "format-adherence",
+      "input": {
+        "messages": [
+          {"role": "user", "content": "把这句话翻译成英文，只输出英文：今天天气很好。"}
+        ]
+      },
+      "criteria": [
+        {"type": "contains", "value": ["weather", "today"]}
+      ]
+    }
+  ]
+}
